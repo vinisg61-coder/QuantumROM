@@ -3235,27 +3235,30 @@ BUILD_SUPER_IMG() {
             continue
         }
 
-        # lpmake's --image path is sparse-aware. Normalize every raw filesystem
-        # image first, while retaining its logical byte size for metadata.
+        # lpmake's --image path accepts normal files and Android sparse files,
+        # but this bundled liblp has an export bug when large EROFS images are
+        # converted to sparse and then imported again. Keep EROFS/ext4 raw and
+        # only normalize an input that is already Android sparse.
         case "$fstype" in
             sparse)
-                local raw_check="$NORMALIZED_DIR/${name}.raw"
-                if ! simg2img "$img" "$raw_check" >/dev/null 2>&1; then
+                local raw_input="$NORMALIZED_DIR/${name}.raw"
+                if ! simg2img "$img" "$raw_input" >/dev/null 2>&1; then
                     echo "- Invalid Android sparse input: $name"
                     rm -rf "$NORMALIZED_DIR"
                     return 1
                 fi
-                logical_size="$(stat -c%s "$raw_check")"
-                rm -f "$raw_check"
+                input_img="$raw_input"
+                logical_size="$(stat -Lc%s "$raw_input")"
+                ;;
+            ext2|ext3|ext4|erofs|f2fs|unknown)
+                # Raw EROFS/ext4/f2fs bytes are the intended logical image data.
+                # They are not converted with img2simg before lpmake.
+                input_img="$img"
                 ;;
             *)
-                local sparse_input="$NORMALIZED_DIR/${name}.sparse"
-                if ! img2simg "$img" "$sparse_input" >/dev/null 2>&1; then
-                    echo "- Could not convert $name ($fstype) to Android sparse format"
-                    rm -rf "$NORMALIZED_DIR"
-                    return 1
-                fi
-                input_img="$sparse_input"
+                echo "- Unsupported input filesystem for lpmake: $name ($fstype)"
+                rm -rf "$NORMALIZED_DIR"
+                return 1
                 ;;
         esac
 
