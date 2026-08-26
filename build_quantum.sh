@@ -15,7 +15,7 @@
 # =============================================================================
 
 # Stock device model or "None"
-STOCK_DEVICE="SM-G980F"
+STOCK_DEVICE="SM-A528B"
 
 # Set to True if your kernel BPF version is 5.4 (lower than 5.10)
 USE_UI_8_TETHERING_APEX="True"
@@ -32,8 +32,8 @@ TARGET_DEVICE_IMEI="350389910895757"
 # Output filesystem: erofs | ext4 | f2fs
 OUTPUT_FILESYSTEM="erofs"
 
-# Specific target firmware version (leave empty to download the latest)
-TARGET_FW_VERSION=""
+# Specific target firmware version (fixed to the QuantumROM base donor)
+TARGET_FW_VERSION="S711BXXSFGZE2/S711BOXMFGZE2/S711BXXSFGZE2/S711BXXSFGZE2"
 
 # Generate a flashable zip at the end of the build? (EXPERIMENTAL)
 # If false, an images zip (raw .img + fastboot sh script) will be generated instead.

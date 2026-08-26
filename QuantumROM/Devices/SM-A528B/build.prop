@@ -1,0 +1,14 @@
+# QuantumROM target identity for Samsung Galaxy A52s 5G (a52sxq)
+ro.product.system.brand=samsung
+ro.product.system.device=a52sxq
+ro.product.system.manufacturer=samsung
+ro.product.system.model=SM-A528B
+ro.product.system.name=a52sxqxx
+ro.system.product.cpu.abilist=arm64-v8a,armeabi-v7a,armeabi
+ro.system.product.cpu.abilist32=armeabi-v7a,armeabi
+ro.system.product.cpu.abilist64=arm64-v8a
+ro.vendor.qti.va_aosp.support=1
+ro.vendor.qti.va_odm.support=1
+ro.product.first_api_level=30
+ro.vendor.build.version.sdk=30
+ro.odm.build.version.sdk=30

@@ -187,6 +187,7 @@ DOWNLOAD_FIRMWARE() {
     local CSC="$2"
     local IMEI="$3"
     local DOWN_DIR="${4}/$MODEL"
+    local REQUESTED_VERSION="${5:-}"
 
     rm -rf "$DOWN_DIR"
     mkdir -p "$DOWN_DIR"
@@ -196,22 +197,31 @@ DOWNLOAD_FIRMWARE() {
     echo -e "======================================"
     echo -e "MODEL: $MODEL | CSC: $CSC"
 
-    VERSION=$(python3 -m samloader -m "$MODEL" -r "$CSC" -i "$IMEI" checkupdate 2>&1)
+    if [ -n "$REQUESTED_VERSION" ]; then
+        VERSION="$REQUESTED_VERSION"
+        echo -e "Using fixed firmware version: $VERSION"
+    else
+        VERSION=$(python3 -m samloader -m "$MODEL" -r "$CSC" -i "$IMEI" checkupdate 2>&1)
 
-    if [ $? -ne 0 ] || [ -z "$VERSION" ]; then
-        echo -e "⛔️ MODEL/CSC/IMEI not valid or no update found."
-        echo -e "Error: $VERSION"
-        return 1
+        if [ $? -ne 0 ] || [ -z "$VERSION" ]; then
+            echo -e "⛔️ MODEL/CSC/IMEI not valid or no update found."
+            echo -e "Error: $VERSION"
+            return 1
+        fi
     fi
 
-    if [ -n "$GITHUB_ENV" ]; then
+    if [ -n "${GITHUB_ENV:-}" ]; then
         echo "VERSION=$VERSION" >> "$GITHUB_ENV"
     fi
 
     # --- Step 2: Download Firmware ---
-    python3 -m samloader -m "$MODEL" -r "$CSC" -i "$IMEI" download -O "$DOWN_DIR"
+    if [ -n "$REQUESTED_VERSION" ]; then
+        python3 -m samloader -m "$MODEL" -r "$CSC" -i "$IMEI" download -v "$VERSION" -O "$DOWN_DIR"
+    else
+        python3 -m samloader -m "$MODEL" -r "$CSC" -i "$IMEI" download -O "$DOWN_DIR"
+    fi
     if [ $? -ne 0 ]; then
-        echo -e "⛔️ Download failed. Check IMEI/MODEL/CSC."
+        echo -e "⛔️ Download failed. Check IMEI/MODEL/CSC/version."
         exit 1
     fi
 
@@ -3166,6 +3176,17 @@ BUILD_SUPER_IMG() {
     local IMAGES=""
     local TOTAL_SIZE=0
     local VALID_IMAGES=0
+    local GROUP_NAME="main"
+    local GROUP_SIZE=""
+    local SUPER_SIZE=""
+    local CONFIG_FILE="${DEVICES_DIR:-$QT_DIR/QuantumROM/Devices}/${STOCK_DEVICE:-}/config"
+
+    if [ -f "$CONFIG_FILE" ]; then
+        GROUP_NAME="$(grep -m1 '^STOCK_FLASHABLE_ZIP_GROUP_NAME=' "$CONFIG_FILE" | cut -d= -f2- | tr -d '\"' | xargs)"
+        GROUP_SIZE="$(grep -m1 '^STOCK_FLASHABLE_ZIP_GROUP_SIZE=' "$CONFIG_FILE" | cut -d= -f2- | tr -d '\"' | xargs)"
+        SUPER_SIZE="$(grep -m1 '^STOCK_SUPER_PARTITION_SIZE=' "$CONFIG_FILE" | cut -d= -f2- | tr -d '\"' | xargs)"
+        [ -n "$GROUP_NAME" ] || GROUP_NAME="main"
+    fi
 
     rm -f "$OUTPUT_IMG"
 
@@ -3191,7 +3212,7 @@ BUILD_SUPER_IMG() {
 
         echo "Adding: $part_name ($size bytes)"
 
-        PARTITIONS+=" --partition ${part_name}:readonly:${size}:main"
+        PARTITIONS+=" --partition ${part_name}:readonly:${size}:${GROUP_NAME}"
         IMAGES+=" --image ${part_name}=$img"
         TOTAL_SIZE=$((TOTAL_SIZE + size))
         VALID_IMAGES=1
@@ -3202,13 +3223,34 @@ BUILD_SUPER_IMG() {
         return 1
     }
 
-    TOTAL_SIZE=$((TOTAL_SIZE + 4194304))
+    local MIN_SUPER_SIZE=$((TOTAL_SIZE + 4194304))
+    if [ -n "$SUPER_SIZE" ]; then
+        if [ "$MIN_SUPER_SIZE" -gt "$SUPER_SIZE" ]; then
+            echo "- Configured super partition is too small: $SUPER_SIZE < $MIN_SUPER_SIZE"
+            return 1
+        fi
+        TOTAL_SIZE="$SUPER_SIZE"
+    else
+        TOTAL_SIZE="$MIN_SUPER_SIZE"
+    fi
+
+    if [ -z "$GROUP_SIZE" ]; then
+        GROUP_SIZE="$TOTAL_SIZE"
+    fi
+
+    if [ "$GROUP_SIZE" -gt "$TOTAL_SIZE" ]; then
+        echo "- Configured dynamic group is larger than super: $GROUP_SIZE > $TOTAL_SIZE"
+        return 1
+    fi
+
+    echo "Using super partition size: $TOTAL_SIZE bytes"
+    echo "Using dynamic group: $GROUP_NAME ($GROUP_SIZE bytes)"
 
     $lpmake \
 	    --device super:$TOTAL_SIZE \
         --metadata-size 65536 \
         --metadata-slots 2 \
-		--group main:$TOTAL_SIZE \
+		--group "$GROUP_NAME:$GROUP_SIZE" \
 		--block-size 4096 \
         $PARTITIONS \
         $IMAGES \
