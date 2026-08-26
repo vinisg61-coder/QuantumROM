@@ -1,0 +1,30 @@
+From upstream LonelyFool/lpunpack_and_lpmake android11 at 7ec860cfa95ed83dec579ab0459aad1c35ad48e4
+
+This minimal patch widens the accumulated backed-block length. Individual sparse
+chunks remain limited to the existing 64 MiB split before writing.
+
+diff --git a/lib/libsparse/backed_block.cpp b/lib/libsparse/backed_block.cpp
+--- a/lib/libsparse/backed_block.cpp
++++ b/lib/libsparse/backed_block.cpp
+@@ -25,7 +25,9 @@ struct backed_block {
+   unsigned int block;
+-  unsigned int len;
++  // Keep the accumulated length wide enough for a logical partition larger than 4 GiB.
++  // Individual sparse chunks remain bounded by backed_block_split() before writing.
++  uint64_t len;
+   enum backed_block_type type;
+@@ -60,7 +62,7 @@ struct backed_block* backed_block_iter_next(struct backed_block* bb) {
+-unsigned int backed_block_len(struct backed_block* bb) {
++uint64_t backed_block_len(struct backed_block* bb) {
+   return bb->len;
+ }
+
+diff --git a/lib/libsparse/backed_block.h b/lib/libsparse/backed_block.h
+--- a/lib/libsparse/backed_block.h
++++ b/lib/libsparse/backed_block.h
+@@ -40,7 +40,7 @@ int backed_block_add_fd(struct backed_block_list* bbl, int fd, int64_t offset, u
+ struct backed_block* backed_block_iter_new(struct backed_block_list* bbl);
+ struct backed_block* backed_block_iter_next(struct backed_block* bb);
+-unsigned int backed_block_len(struct backed_block* bb);
++uint64_t backed_block_len(struct backed_block* bb);
+ unsigned int backed_block_block(struct backed_block* bb);

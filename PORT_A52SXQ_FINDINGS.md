@@ -74,3 +74,25 @@ Para o SM-A528B, os limites configurados são `STOCK_SUPER_PARTITION_SIZE=106430
 ## Rerun da correção
 
 A correção do `lpmake` e a propagação de erro foram publicadas na branch `port/a52sxq-clean` no commit `15b7be7`. O formulário `workflow_dispatch` reabriu com `master` como ref padrão; o rerun deve ser executado explicitamente na branch `port/a52sxq-clean`, mantendo `SM-A528B`, `SM-S711B/EUX`, a versão doadora exata e `erofs`.
+
+## Rerun #2 e correção final
+
+A execução `32978169663` passou por download, extração e ajustes de partições, mas falhou em `Start Rom Build For SM-A528B` com `sparse_file_write failed (error code -22)`. O log mostrou que a falha ocorria após converter imagens EROFS grandes para sparse antes de reimportá-las. Testes locais com EROFS raw, EROFS sparse, quatro dimensões reais e `lpunpack` mostraram que o caminho robusto é manter EROFS/ext4 raw como input, validar apenas Android sparse existente com `simg2img`, usar `--sparse` na saída do `lpmake` e converter o super final para raw.
+
+A implementação final foi publicada na branch `port/a52sxq-clean` no commit `bee3183`, e o novo rerun deve ser disparado na mesma branch com `SM-A528B`, `SM-S711B/EUX`, firmware doador fixo e `erofs`.
+
+## Execução #2 e preparação da #3
+
+A execução `32978169663` falhou em `Start Rom Build For SM-A528B` com `sparse_file_write failed (error code -22)` após a conversão prévia das imagens EROFS grandes. A correção final no commit `bee3183` remove essa dupla conversão: inputs EROFS/ext4 permanecem raw, inputs Android sparse são validados com `simg2img`, `lpmake` gera sparse e o resultado é convertido para raw antes do empacotamento. O formulário do Actions está aberto para executar a branch `port/a52sxq-clean` com os inputs do QuantumROM.
+
+## Execução #3
+
+O disparo via CLI foi bloqueado por HTTP 403, então a execução será iniciada pelo My Browser autenticado. O formulário está na branch `port/a52sxq-clean`, commit `bee3183`, com `SM-A528B` como stock, `SM-S711B/EUX` como doador, versão exata `S711BXXSFGZE2/S711BOXMFGZE2/S711BXXSFGZE2/S711BXXSFGZE2` e saída `erofs`.
+
+## Execução #4 e causa definitiva do -22
+
+A execução `33012257188`, commit `bee3183`, saiu de `queued` e completou sem erros o checkout, validação do SM-A528B, instalação de dependências, download/extract do doador SM-S711B/EUX fixado, download dos extras nativos A52s, ajustes de partições, de-bloat, patches e geração das quatro imagens. Ela falhou somente ao escrever o `super.img`, com `sparse_file_write failed (error code -22)`, antes da etapa de ZIP; o workflow abortou corretamente e não publicou Artifact.
+
+A reprodução local com as dimensões reais e arquivos zerados passou. A reprodução com um `system.img` não-zero de 4.557.168.640 bytes falhou com o mesmo -22 no `lpmake` original, tanto com `--sparse` quanto sem `--sparse`. A causa é o overflow do campo interno `backed_block.len`, declarado como `unsigned int` na implementação Android 11 bundled de `libsparse`. Como o `system` excede 4 GiB, a coalescência dos blocos de 4096 bytes transborda antes do split de 64 MiB; o writer recebe um comprimento inválido e devolve `EINVAL`.
+
+A correção mínima foi aplicada no upstream `LonelyFool/lpunpack_and_lpmake` Android 11, commit `7ec860cfa95ed83dec579ab0459aad1c35ad48e4`: `backed_block.len` e `backed_block_len()` foram ampliados para `uint64_t`, mantendo os limites de chunk e o formato sparse originais. O binário estático rebuilt passou a gerar o sparse super, `simg2img` produziu raw de exatamente `10.643.046.400` bytes e `lpunpack` recuperou `odm`, `product`, `system` e `vendor` nos tamanhos esperados. O binário corrigido foi instalado somente em `bin/lp/lpmake`; o patch e a proveniência estão documentados em `bin/lp/backed_block_64bit.patch` e `bin/lp/LPMMAKE_BUILD.md`.
