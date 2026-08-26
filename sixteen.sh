@@ -13,6 +13,18 @@ export TARGET_DEVICE_CSC="$4"
 export TARGET_DEVICE_IMEI="$5"
 export OUTPUT_FILESYSTEM="$6"
 
+# Respect a target-specific default filesystem when declared in its device config.
+# This keeps the original workflow override for other targets while ensuring
+# SM-A528B/a52sxq uses the ext4 format required by its stock early-mount fstab.
+DEVICE_CONFIG="$(pwd)/QuantumROM/Devices/${STOCK_DEVICE}/config"
+if [ -f "$DEVICE_CONFIG" ]; then
+    TARGET_DEFAULT_IMG_TYPE="$(grep -m1 '^default_img_type=' "$DEVICE_CONFIG" | cut -d= -f2- | tr -d '\"' | xargs)"
+    if [ -n "$TARGET_DEFAULT_IMG_TYPE" ]; then
+        echo "[TARGET] ${STOCK_DEVICE}: forcing OUTPUT_FILESYSTEM=${TARGET_DEFAULT_IMG_TYPE} from ${DEVICE_CONFIG}"
+        export OUTPUT_FILESYSTEM="$TARGET_DEFAULT_IMG_TYPE"
+    fi
+fi
+
 VERSION="1"
 
 # Directories
