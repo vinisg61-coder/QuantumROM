@@ -6,7 +6,7 @@ on:
       STOCK_DEVICE:
         description: "STOCK_DEVICE_MODEL or None"
         required: true
-        default: "SM-G980F"
+        default: "SM-A528B"
       USE_UI_8_TETHERING_APEX:
         description: "Set True if your kernel BPF version is 5.4 (lower than 5.10)."
         required: true
@@ -27,6 +27,10 @@ on:
         description: "OUTPUT_FILESYSTEM. e.g erofs / ext4 / f2fs"
         required: true
         default: "erofs"
+      TARGET_FW_VERSION:
+        description: "Exact QuantumROM donor firmware version"
+        required: true
+        default: "S711BXXSFGZE2/S711BOXMFGZE2/S711BXXSFGZE2/S711BXXSFGZE2"
       PIXELDRAIN_API_KEY:
         description: "Pixeldrain API key (optional — leave blank to skip upload)"
         required: false
@@ -75,12 +79,18 @@ jobs:
         env:
           STOCK_DEVICE: ${{ github.event.inputs.STOCK_DEVICE }}
           GH_TOKEN: ${{ secrets.GIT_TOKEN }}
-          RELEASE_REPO: "miguelbarretoo/QuantumROM"
-          RELEASE_TAG: "extra-files"
         run: |
           set -e
 
-          SUPPORTED_DEVICES=("SM-G780F" "SM-G980F" "SM-G988B")
+          if [ "$STOCK_DEVICE" = "SM-A528B" ]; then
+            RELEASE_REPO="${{ github.repository }}"
+            RELEASE_TAG="a52sxq-extras"
+          else
+            RELEASE_REPO="miguelbarretoo/QuantumROM"
+            RELEASE_TAG="extra-files"
+          fi
+
+          SUPPORTED_DEVICES=("SM-G780F" "SM-G980F" "SM-G988B" "SM-A528B")
 
           IS_SUPPORTED=false
           for d in "${SUPPORTED_DEVICES[@]}"; do
@@ -124,8 +134,17 @@ jobs:
       - name: Adjust build partitions based on available extras
         env:
           STOCK_DEVICE: ${{ github.event.inputs.STOCK_DEVICE }}
+          GH_TOKEN: ${{ secrets.GIT_TOKEN }}
         run: |
           set -e
+
+          if [ "$STOCK_DEVICE" = "SM-A528B" ]; then
+            RELEASE_REPO="${{ github.repository }}"
+            RELEASE_TAG="a52sxq-extras"
+          else
+            RELEASE_REPO="miguelbarretoo/QuantumROM"
+            RELEASE_TAG="extra-files"
+          fi
 
           EXTRAS_DIR="QuantumROM/Devices/${STOCK_DEVICE}/extra"
           BASE_PARTITIONS="product,system_ext,system"
@@ -141,6 +160,21 @@ jobs:
             EXTRA_PARTITIONS="${EXTRA_PARTITIONS},odm"
           else
             echo "⚠️  odm.img not found in $EXTRAS_DIR — odm partition will be skipped."
+          fi
+
+          if [ "$STOCK_DEVICE" = "SM-A528B" ]; then
+            echo "⬇️  Downloading native A52s boot/dtbo bundle..."
+            if curl -f -L -H "Authorization: Bearer ${GH_TOKEN}" \
+                "https://github.com/${RELEASE_REPO}/releases/download/${RELEASE_TAG}/SM-A528B-boot-dtbo.zip" \
+                -o "$EXTRAS_DIR/boot-dtbo.a52sxq.zip"; then
+              echo "✅ boot-dtbo.a52sxq.zip saved to $EXTRAS_DIR"
+            else
+              echo "❌ Native A52s boot/dtbo bundle is required but was not found."
+              exit 1
+            fi
+            [ -f "$EXTRAS_DIR/vendor.img" ] || { echo "❌ Native A52s vendor.img is required."; exit 1; }
+            [ -f "$EXTRAS_DIR/odm.img" ] || { echo "❌ Native A52s odm.img is required."; exit 1; }
+            EXTRA_PARTITIONS=",vendor,odm"
           fi
 
           FINAL_PARTITIONS="${BASE_PARTITIONS}${EXTRA_PARTITIONS}"
