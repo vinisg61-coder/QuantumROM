@@ -80,7 +80,10 @@ BUILD_PROP "$FIRM_DIR/$TARGET_DEVICE" "system" "ro.build.display.id" "QuantumROM
 BUILD_PROP "$FIRM_DIR/$TARGET_DEVICE" "product" "ro.build.display.id" "QuantumROM Aurora - 1.0.0 (${B_ID}.${B_V})"
 
 BUILD_IMG "$FIRM_DIR/$TARGET_DEVICE" "all" "$OUTPUT_FILESYSTEM" "$OUT_DIR"
-BUILD_SUPER_IMG "$OUT_DIR" "$OUT_DIR"
+if ! BUILD_SUPER_IMG "$OUT_DIR" "$OUT_DIR"; then
+    echo "- Failed to build a valid super.img; aborting before flashable ZIP packaging."
+    exit 1
+fi
 
 # Clean up stock vendor/odm images from firmware dir (already built to OUT)
 rm -f "$FIRM_DIR/$TARGET_DEVICE/vendor.img" "$FIRM_DIR/$TARGET_DEVICE/odm.img"

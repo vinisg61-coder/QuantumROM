@@ -3164,6 +3164,8 @@ BUILD_SUPER_IMG() {
     local IMG_DIR="$1"
     local OUTPUT_DIR="$2"
     local OUTPUT_IMG="$OUTPUT_DIR/super.img"
+    local OUTPUT_SPARSE="${OUTPUT_IMG}.sparse"
+    local NORMALIZED_DIR=""
 
     echo "Building: super.img"
 
@@ -3172,9 +3174,19 @@ BUILD_SUPER_IMG() {
         return 1
     }
 
-    local PARTITIONS=""
-    local IMAGES=""
+    if ! command -v simg2img >/dev/null 2>&1 || ! command -v img2simg >/dev/null 2>&1; then
+        echo "- simg2img and img2simg are required to normalize lpmake inputs"
+        return 1
+    fi
+
+    local -a LP_ARGS=(
+        --metadata-size 65536
+        --metadata-slots 2
+        --block-size 4096
+        --sparse
+    )
     local TOTAL_SIZE=0
+    local ALIGNED_TOTAL_SIZE=0
     local VALID_IMAGES=0
     local GROUP_NAME="main"
     local GROUP_SIZE=""
@@ -3188,7 +3200,18 @@ BUILD_SUPER_IMG() {
         [ -n "$GROUP_NAME" ] || GROUP_NAME="main"
     fi
 
-    rm -f "$OUTPUT_IMG"
+    if [ -n "$GROUP_SIZE" ] && ! [[ "$GROUP_SIZE" =~ ^[0-9]+$ ]]; then
+        echo "- Invalid dynamic group size: $GROUP_SIZE"
+        return 1
+    fi
+    if [ -n "$SUPER_SIZE" ] && ! [[ "$SUPER_SIZE" =~ ^[0-9]+$ ]]; then
+        echo "- Invalid super partition size: $SUPER_SIZE"
+        return 1
+    fi
+
+    mkdir -p "$OUTPUT_DIR"
+    NORMALIZED_DIR="$(mktemp -d "$OUTPUT_DIR/.super-inputs.XXXXXX")"
+    rm -f "$OUTPUT_IMG" "$OUTPUT_SPARSE"
 
     for img in "$IMG_DIR"/*.img; do
         [ -e "$img" ] || continue
@@ -3203,30 +3226,66 @@ BUILD_SUPER_IMG() {
         esac
 
         local part_name="${name%.img}"
-        local size=$(stat -c%s "$img")
+        local logical_size="$(stat -Lc%s "$img")"
+        local input_img="$img"
+        local fstype="$(DETECT_FILESYSTEM "$img")"
 
-        [ "$size" -le 0 ] && {
+        [ "$logical_size" -le 0 ] && {
             echo "- Skipping empty image: $name"
             continue
         }
 
-        echo "Adding: $part_name ($size bytes)"
+        # lpmake's --image path is sparse-aware. Normalize every raw filesystem
+        # image first, while retaining its logical byte size for metadata.
+        case "$fstype" in
+            sparse)
+                local raw_check="$NORMALIZED_DIR/${name}.raw"
+                if ! simg2img "$img" "$raw_check" >/dev/null 2>&1; then
+                    echo "- Invalid Android sparse input: $name"
+                    rm -rf "$NORMALIZED_DIR"
+                    return 1
+                fi
+                logical_size="$(stat -c%s "$raw_check")"
+                rm -f "$raw_check"
+                ;;
+            *)
+                local sparse_input="$NORMALIZED_DIR/${name}.sparse"
+                if ! img2simg "$img" "$sparse_input" >/dev/null 2>&1; then
+                    echo "- Could not convert $name ($fstype) to Android sparse format"
+                    rm -rf "$NORMALIZED_DIR"
+                    return 1
+                fi
+                input_img="$sparse_input"
+                ;;
+        esac
 
-        PARTITIONS+=" --partition ${part_name}:readonly:${size}:${GROUP_NAME}"
-        IMAGES+=" --image ${part_name}=$img"
-        TOTAL_SIZE=$((TOTAL_SIZE + size))
+        if (( logical_size % 4096 != 0 )); then
+            echo "- Image is not 4096-byte aligned: $name ($logical_size bytes)"
+            rm -rf "$NORMALIZED_DIR"
+            return 1
+        fi
+
+        local aligned_size=$(( (logical_size + 1048575) / 1048576 * 1048576 ))
+        echo "Adding: $part_name ($logical_size bytes, sparse input, aligned $aligned_size)"
+
+        LP_ARGS+=(--partition "${part_name}:readonly:${logical_size}:${GROUP_NAME}")
+        LP_ARGS+=(--image "${part_name}=${input_img}")
+        TOTAL_SIZE=$((TOTAL_SIZE + logical_size))
+        ALIGNED_TOTAL_SIZE=$((ALIGNED_TOTAL_SIZE + aligned_size))
         VALID_IMAGES=1
     done
 
-    [ "$VALID_IMAGES" -eq 0 ] && {
+    if [ "$VALID_IMAGES" -eq 0 ]; then
         echo "- No valid logical partition images found"
+        rm -rf "$NORMALIZED_DIR"
         return 1
-    }
+    fi
 
-    local MIN_SUPER_SIZE=$((TOTAL_SIZE + 4194304))
+    local MIN_SUPER_SIZE=$((ALIGNED_TOTAL_SIZE + 4194304))
     if [ -n "$SUPER_SIZE" ]; then
         if [ "$MIN_SUPER_SIZE" -gt "$SUPER_SIZE" ]; then
             echo "- Configured super partition is too small: $SUPER_SIZE < $MIN_SUPER_SIZE"
+            rm -rf "$NORMALIZED_DIR"
             return 1
         fi
         TOTAL_SIZE="$SUPER_SIZE"
@@ -3240,19 +3299,51 @@ BUILD_SUPER_IMG() {
 
     if [ "$GROUP_SIZE" -gt "$TOTAL_SIZE" ]; then
         echo "- Configured dynamic group is larger than super: $GROUP_SIZE > $TOTAL_SIZE"
+        rm -rf "$NORMALIZED_DIR"
+        return 1
+    fi
+    if [ "$ALIGNED_TOTAL_SIZE" -gt "$GROUP_SIZE" ]; then
+        echo "- Logical partition payload exceeds dynamic group: $ALIGNED_TOTAL_SIZE > $GROUP_SIZE"
+        rm -rf "$NORMALIZED_DIR"
         return 1
     fi
 
     echo "Using super partition size: $TOTAL_SIZE bytes"
     echo "Using dynamic group: $GROUP_NAME ($GROUP_SIZE bytes)"
+    LP_ARGS+=(--group "${GROUP_NAME}:${GROUP_SIZE}")
+    LP_ARGS+=(--device "super:${TOTAL_SIZE}")
 
-    $lpmake \
-	    --device super:$TOTAL_SIZE \
-        --metadata-size 65536 \
-        --metadata-slots 2 \
-		--group "$GROUP_NAME:$GROUP_SIZE" \
-		--block-size 4096 \
-        $PARTITIONS \
-        $IMAGES \
-        --output "$OUTPUT_IMG"
+    if ! "$lpmake" "${LP_ARGS[@]}" --output "$OUTPUT_SPARSE"; then
+        echo "- lpmake failed while writing sparse super.img"
+        rm -f "$OUTPUT_SPARSE"
+        rm -rf "$NORMALIZED_DIR"
+        return 1
+    fi
+
+    if [ ! -s "$OUTPUT_SPARSE" ]; then
+        echo "- lpmake produced an empty sparse super.img"
+        rm -rf "$NORMALIZED_DIR"
+        return 1
+    fi
+
+    local RAW_SUPER="${OUTPUT_IMG}.raw"
+    rm -f "$RAW_SUPER"
+    if ! simg2img "$OUTPUT_SPARSE" "$RAW_SUPER" >/dev/null 2>&1; then
+        echo "- lpmake output failed Android sparse validation"
+        rm -f "$OUTPUT_SPARSE" "$RAW_SUPER"
+        rm -rf "$NORMALIZED_DIR"
+        return 1
+    fi
+
+    if [ "$(stat -c%s "$RAW_SUPER")" -ne "$TOTAL_SIZE" ]; then
+        echo "- Raw super.img size mismatch: expected $TOTAL_SIZE, got $(stat -c%s "$RAW_SUPER")"
+        rm -f "$OUTPUT_SPARSE" "$RAW_SUPER"
+        rm -rf "$NORMALIZED_DIR"
+        return 1
+    fi
+
+    mv -f "$RAW_SUPER" "$OUTPUT_IMG"
+    rm -f "$OUTPUT_SPARSE"
+    rm -rf "$NORMALIZED_DIR"
+        echo "- Valid raw super.img created: $(stat -Lc%s "$OUTPUT_IMG") bytes"
 }
