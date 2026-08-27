@@ -66,6 +66,12 @@ if [ "$STOCK_DEVICE" = "SM-A528B" ]; then
         "$STOCK_DEVICE"
 fi
 
+if [ "$STOCK_DEVICE" = "SM-A528B" ]; then
+    python3 "$(pwd)/scripts/patch_a52sxq_camera_binary.py" \
+        "$FIRM_DIR/$TARGET_DEVICE" \
+        "$STOCK_DEVICE"
+fi
+
 PATCH_A52SXQ_CAMERA_CONFIG "$FIRM_DIR/$TARGET_DEVICE"
 PATCH_SELINUX "$FIRM_DIR/$TARGET_DEVICE"
 PATCH_SYSTEM_EXT_VINTF "$FIRM_DIR/$TARGET_DEVICE"
