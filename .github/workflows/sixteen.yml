@@ -148,6 +148,11 @@ jobs:
 
           EXTRAS_DIR="QuantumROM/Devices/${STOCK_DEVICE}/extra"
           BASE_PARTITIONS="product,system_ext,system"
+          TARGET_CONFIG="QuantumROM/Devices/${STOCK_DEVICE}/config"
+          if [ -f "$TARGET_CONFIG" ] && grep -q '^STOCK_HAS_SEPARATE_SYSTEM_EXT=FALSE' "$TARGET_CONFIG"; then
+            BASE_PARTITIONS="product,system"
+            echo "✅ Target declares system_ext merged into /system; not keeping a separate logical partition."
+          fi
           EXTRA_PARTITIONS=""
 
           if [ -f "$EXTRAS_DIR/vendor.img" ]; then
@@ -203,7 +208,7 @@ jobs:
         env:
           PIXELDRAIN_API_KEY: ${{ github.event.inputs.PIXELDRAIN_API_KEY }}
         run: |
-          ZIP_PATH="$(find OUT -name "QuantumROM*.zip" | head -n1)"
+          ZIP_PATH="$(find OUT -name \"QuantumROM*.zip\" | head -n1)"
 
           if [ -z "$ZIP_PATH" ]; then
             echo "❌ No zip found in OUT/ to upload."
@@ -212,19 +217,15 @@ jobs:
 
           ZIP_NAME="$(basename "$ZIP_PATH")"
           echo "📤 Uploading $ZIP_NAME to Pixeldrain..."
-
           RESPONSE="$(curl -s \
             -u ":${PIXELDRAIN_API_KEY}" \
             -F "file=@${ZIP_PATH};filename=${ZIP_NAME}" \
             "https://pixeldrain.com/api/file")"
-
           FILE_ID="$(echo "$RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))")"
-
           if [ -z "$FILE_ID" ]; then
             echo "❌ Pixeldrain upload failed. Response: $RESPONSE"
             exit 1
           fi
-
           PD_LINK="https://pixeldrain.com/u/${FILE_ID}"
           echo ""
           echo "✅ Upload successful!"
@@ -238,7 +239,7 @@ jobs:
           echo "========================================"
           echo "         QuantumROM Build Complete"
           echo "========================================"
-          ZIP_NAME="$(find OUT -name "QuantumROM*.zip" -printf '%f\n' | head -n1)"
+          ZIP_NAME="$(find OUT -name \"QuantumROM*.zip\" -printf '%f\\n' | head -n1)"
           echo "📦 ROM: $ZIP_NAME"
           if [ -n "${PD_LINK:-}" ]; then
             echo "🔗 Pixeldrain: $PD_LINK"
