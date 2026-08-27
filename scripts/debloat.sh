@@ -2,7 +2,11 @@
 # =============================================================================
 #  QuantumROM — debloat.sh (Galaxy AI, Messages & Velvet Preserved)
 # =============================================================================
-source "$DEVICES_DIR/STOCK_DEVICE/config"
+if [ -n "${DEVICES_DIR:-}" ] && [ -n "${STOCK_DEVICE:-}" ] && [ -f "$DEVICES_DIR/$STOCK_DEVICE/config" ]; then
+    source "$DEVICES_DIR/$STOCK_DEVICE/config"
+else
+    echo "[WARN] Target config not found while sourcing debloat settings: ${DEVICES_DIR:-<unset>}/${STOCK_DEVICE:-<unset>}/config"
+fi
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 KICK() {

@@ -1564,11 +1564,18 @@ PATCH_VENDOR_INIT() {
     local TARGET_DIR="$1"
     echo "- Swapping Vendor Init Configuration to Device Stock Baseline..."
 
-    local STOCK_DIR="${DEVICES_DIR}/$STOCK_DEVICE/Stock" 
-    local PORT_VENDOR_INIT="${TARGET_DIR}/vendor/etc/init"
+	local STOCK_DIR="${DEVICES_DIR}/$STOCK_DEVICE/Stock"
+	local PORT_VENDOR_INIT="${TARGET_DIR}/vendor/etc/init"
 
-    # Verificação e substituição do arquivo de inicialização do Exynos 990
-    if [ -f "${STOCK_DIR}/vendor/etc/init/init.exynos990.rc" ]; then
+	# The original hook is Exynos-990-specific. The A52s uses the native
+	# Qualcomm init files already supplied by its vendor image.
+	if [ "$STOCK_DEVICE" = "SM-A528B" ]; then
+	    echo "- A52s uses native Qualcomm vendor init; skipping Exynos init hook."
+	    return 0
+	fi
+
+	# Verificação e substituição do arquivo de inicialização do Exynos 990
+	if [ -f "${STOCK_DIR}/vendor/etc/init/init.exynos990.rc" ]; then
         echo "- Replacing init.exynos990.rc with internal stock reference..."
         mkdir -p "$PORT_VENDOR_INIT"
         cp -f "${STOCK_DIR}/vendor/etc/init/init.exynos990.rc" "${PORT_VENDOR_INIT}/init.exynos990.rc"
@@ -2104,9 +2111,13 @@ APPLY_STOCK_CONFIG() {
 	rm -rf "${EXTRACTED_FIRM_DIR}/system/system/etc/init"/rscmgr*.rc
 	find "${EXTRACTED_FIRM_DIR}/system/system/media" -maxdepth 1 -type f \( -iname "*.spi" -o -iname "*.qmg" -o -iname "*.txt" \) -delete
 	rm -rf "$EXTRACTED_FIRM_DIR"/product/overlay/framework-res*auto_generated_rro_product.apk
-	rm -rf ${EXTRACTED_FIRM_DIR}/product/overlay/SystemUI*auto_generated_rro_product.apk
-	cp -a "${DEVICES_DIR}/$STOCK_DEVICE/Stock/." "${EXTRACTED_FIRM_DIR}/"
-    if [ -d "${DEVICES_DIR}/$STOCK_DEVICE/extra" ]; then
+		rm -rf ${EXTRACTED_FIRM_DIR}/product/overlay/SystemUI*auto_generated_rro_product.apk
+		if [ -d "${DEVICES_DIR}/$STOCK_DEVICE/Stock" ]; then
+		    cp -a "${DEVICES_DIR}/$STOCK_DEVICE/Stock/." "${EXTRACTED_FIRM_DIR}/"
+		else
+		    echo "- Warning: no target Stock tree at ${DEVICES_DIR}/$STOCK_DEVICE/Stock; preserving extracted donor/native assets."
+		fi
+	    if [ -d "${DEVICES_DIR}/$STOCK_DEVICE/extra" ]; then
         cp -af "${DEVICES_DIR}/$STOCK_DEVICE/extra/." "$(pwd)/OUT"
     fi
 

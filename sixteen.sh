@@ -36,6 +36,10 @@ export DEVICES_DIR="$(pwd)/QuantumROM/Devices"
 export VNDKS_COLLECTION="$(pwd)/QuantumROM/vndks"
 export PATCHES_DIR="$(pwd)/QuantumROM/patches"
 export BUILD_PARTITIONS="product,system_ext,system,vendor,odm"
+if grep -q '^STOCK_HAS_SEPARATE_SYSTEM_EXT=FALSE' "$DEVICE_CONFIG"; then
+    export BUILD_PARTITIONS="product,system,vendor,odm"
+    echo "[TARGET] ${STOCK_DEVICE}: using merged system_ext layout; BUILD_PARTITIONS=${BUILD_PARTITIONS}"
+fi
 
 # Source
 source "$(pwd)/scripts/debloat.sh"
@@ -53,6 +57,15 @@ DEBLOAT "$FIRM_DIR/$TARGET_DEVICE"
 PATCH_CODEC2_SECCOMP "$FIRM_DIR/$TARGET_DEVICE"
 
 APPLY_STOCK_CONFIG "$FIRM_DIR/$TARGET_DEVICE"
+
+# SM-A528B stock 5.4 compatibility: prevent donor schedtune/cgroup setup
+# from making apexd-bootstrap fatal before Android userspace starts.
+if [ "$STOCK_DEVICE" = "SM-A528B" ]; then
+    python3 "$(pwd)/scripts/patch_a52sxq_compat.py" \
+        "$FIRM_DIR/$TARGET_DEVICE" \
+        "$STOCK_DEVICE"
+fi
+
 PATCH_SELINUX "$FIRM_DIR/$TARGET_DEVICE"
 PATCH_SYSTEM_EXT_VINTF "$FIRM_DIR/$TARGET_DEVICE"
 ENABLE_DEBUG_PORT "$FIRM_DIR/$TARGET_DEVICE" 
