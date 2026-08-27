@@ -2011,6 +2011,47 @@ FIX_CAMERA() {
 }
 
 
+PATCH_A52SXQ_CAMERA_CONFIG() {
+    if [ "$#" -ne 1 ]; then
+        echo "Usage: ${FUNCNAME[0]} <EXTRACTED_FIRM_DIR>"
+        return 1
+    fi
+
+    local EXTRACTED_FIRM_DIR="$1"
+
+    # This is deliberately target-specific. Do not change the donor or native
+    # A52s camera binaries while the verified logical CTS XML is unavailable.
+    if [ "$STOCK_DEVICE" != "SM-A528B" ]; then
+        return 0
+    fi
+
+    local SOURCE_FILE="$(pwd)/QuantumROM/Devices/SM-A528B/camera/camxoverridesettings.txt"
+    local DEST_DIR="${EXTRACTED_FIRM_DIR}/vendor/etc/camera"
+    local DEST_FILE="${DEST_DIR}/camxoverridesettings.txt"
+
+    if [ ! -f "$SOURCE_FILE" ]; then
+        echo "- A52s camera override source not found: $SOURCE_FILE"
+        return 1
+    fi
+
+    mkdir -p "$DEST_DIR"
+    cp -af "$SOURCE_FILE" "$DEST_FILE"
+    chmod 0644 "$DEST_FILE"
+    chown "$REAL_USER:$REAL_USER" "$DEST_FILE" 2>/dev/null || true
+
+    grep -qxF 'multiCameraEnable=0' "$DEST_FILE" || {
+        echo "- A52s camera override validation failed: multiCameraEnable"
+        return 1
+    }
+    grep -qxF 'enableFeature2CTS=0' "$DEST_FILE" || {
+        echo "- A52s camera override validation failed: enableFeature2CTS"
+        return 1
+    }
+
+    echo "- A52s CamX fallback installed: vendor/etc/camera/camxoverridesettings.txt"
+}
+
+
 OVERRIDE_STOCK_VENDOR_ODM() {
     if [ "$#" -ne 1 ]; then
         echo -e "Usage: ${FUNCNAME[0]} <EXTRACTED_FIRM_DIR>"

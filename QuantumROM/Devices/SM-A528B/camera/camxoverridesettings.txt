@@ -1,0 +1,4 @@
+# A52s native CamX fallback: the donor framework has no valid kodiak logical CTS XML.
+# Keep the native A52s single-camera path until a verified stock logical XML exists.
+multiCameraEnable=0
+enableFeature2CTS=0
