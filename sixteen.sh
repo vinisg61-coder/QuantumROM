@@ -74,6 +74,16 @@ fi
 
 PATCH_A52SXQ_CAMERA_CONFIG "$FIRM_DIR/$TARGET_DEVICE"
 
+# A52s Wi-Fi resource RRO: disable donor-only 6 GHz/802.11be/bridged AP
+# capability flags while preserving the native HIDL HAL and vendor blobs.
+if [ "$STOCK_DEVICE" = "SM-A528B" ]; then
+    python3 "$(pwd)/scripts/patch_a52sxq_wifi_resources.py" \
+        "$FIRM_DIR/$TARGET_DEVICE" \
+        "$STOCK_DEVICE" \
+        "$APKTOOL" \
+        "$WORK_DIR"
+fi
+
 # SM-A528B native Qualcomm WLAN interface map: keep STA on wlan0 and
 # expose the native concurrent/AP and auxiliary interfaces to the donor framework.
 # This is target-only and does not replace vendor Wi-Fi HAL or firmware blobs.

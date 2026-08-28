@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+    <!-- A52s has no 6 GHz radio; prevent donor capability leakage. -->
+    <bool name="config_wifi6ghzSupport">false</bool>
+    <bool name="config_wifiSoftap6ghzSupported">false</bool>
+
+    <!-- A52s native QCA stack is Wi-Fi 6/HIDL legacy, not 802.11be. -->
+    <bool name="config_wifi11beSupportOverride">false</bool>
+    <bool name="config_wifiSoftapIeee80211beSupported">false</bool>
+
+    <!-- Avoid AP_BRIDGED/createBridgedApIface on the native legacy HAL. -->
+    <bool name="config_wifiBridgedSoftApSupported">false</bool>
+    <bool name="config_wifiStaWithBridgedSoftApConcurrencySupported">false</bool>
+    <bool name="config_wifiSoftapAutoUpgradeToBridgedConfigWhenSupported">false</bool>
+</resources>
