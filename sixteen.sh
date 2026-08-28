@@ -73,6 +73,16 @@ if [ "$STOCK_DEVICE" = "SM-A528B" ]; then
 fi
 
 PATCH_A52SXQ_CAMERA_CONFIG "$FIRM_DIR/$TARGET_DEVICE"
+
+# SM-A528B native Qualcomm WLAN interface map: keep STA on wlan0 and
+# expose the native concurrent/AP and auxiliary interfaces to the donor framework.
+# This is target-only and does not replace vendor Wi-Fi HAL or firmware blobs.
+if [ "$STOCK_DEVICE" = "SM-A528B" ]; then
+    BUILD_PROP "$FIRM_DIR/$TARGET_DEVICE" "system" "wifi.concurrent.interface" "swlan0"
+    BUILD_PROP "$FIRM_DIR/$TARGET_DEVICE" "system" "wifi.direct.interface" "p2p0"
+    BUILD_PROP "$FIRM_DIR/$TARGET_DEVICE" "system" "wifi.aware.interface" "wifi-aware0"
+fi
+
 PATCH_SELINUX "$FIRM_DIR/$TARGET_DEVICE"
 PATCH_SYSTEM_EXT_VINTF "$FIRM_DIR/$TARGET_DEVICE"
 ENABLE_DEBUG_PORT "$FIRM_DIR/$TARGET_DEVICE" 
