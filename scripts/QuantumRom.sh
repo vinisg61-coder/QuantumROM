@@ -2011,6 +2011,79 @@ FIX_CAMERA() {
 }
 
 
+IMPORT_A52SXQ_CAMERA_MOTION() {
+    if [ "$#" -ne 2 ]; then
+        echo "Usage: ${FUNCNAME[0]} <EXTRACTED_FIRM_DIR> <DONOR_VENDOR_IMG>"
+        return 1
+    fi
+
+    local EXTRACTED_FIRM_DIR="$1"
+    local DONOR_VENDOR_IMG="$2"
+    [ "$STOCK_DEVICE" = "SM-A528B" ] || return 0
+    [ -f "$DONOR_VENDOR_IMG" ] || {
+        echo "- A52s camera: donor vendor image not found; cannot import libMOTION.so"
+        return 0
+    }
+    command -v debugfs >/dev/null 2>&1 || {
+        echo "- A52s camera: debugfs unavailable; cannot import donor libMOTION.so"
+        return 0
+    }
+
+    local tree motion_path tmp dest
+    tree="$(debugfs -R 'ls -p -r /' "$DONOR_VENDOR_IMG" 2>/dev/null || true)"
+    motion_path="$(printf '%s\n' "$tree" | grep -Eo '/lib(64)?/camera/components/libMOTION\.so' | head -n 1 || true)"
+    if [ -z "$motion_path" ]; then
+        echo "- A52s camera: libMOTION.so not found in donor vendor image"
+        return 0
+    fi
+
+    case "$motion_path" in
+        /lib64/*) dest="${EXTRACTED_FIRM_DIR}/vendor${motion_path}" ;;
+        /lib/*) dest="${EXTRACTED_FIRM_DIR}/vendor${motion_path}" ;;
+        *) echo "- A52s camera: unsupported libMOTION path ${motion_path}"; return 0 ;;
+    esac
+    # This imports only the missing component and never replaces the native
+    # A52s camera.qcom.so or the rest of the camera HAL.
+    mkdir -p "$(dirname "$dest")"
+    tmp="${WORK_DIR:-/tmp}/a52sxq-libMOTION.so"
+    rm -f "$tmp"
+    if debugfs -R "dump $motion_path $tmp" "$DONOR_VENDOR_IMG" >/dev/null 2>&1 && [ -s "$tmp" ]; then
+        cp -af "$tmp" "$dest"
+        chmod 0644 "$dest"
+        chown "$REAL_USER:$REAL_USER" "$dest" 2>/dev/null || true
+        echo "- A52s camera: imported donor ${motion_path} -> ${dest}"
+    else
+        echo "- A52s camera: failed to extract donor ${motion_path}"
+    fi
+    rm -f "$tmp"
+}
+DISABLE_A52SXQ_SDHMS() {
+    if [ "$#" -ne 1 ]; then
+        echo "Usage: ${FUNCNAME[0]} <EXTRACTED_FIRM_DIR>"
+        return 1
+    fi
+    local EXTRACTED_FIRM_DIR="$1"
+    [ "$STOCK_DEVICE" = "SM-A528B" ] || return 0
+
+    # The A52s stock vendor asset has no /vendor/etc/siop tables. Keeping the
+    # donor/alternate SDHMS APK makes it crash in SiopExpression at startup.
+    # Remove only this optional health manager package; do not alter SSRM or
+    # the kernel thermal framework.
+    local removed=0 path
+    for path in \
+        "${EXTRACTED_FIRM_DIR}/system/priv-app/SamsungDeviceHealthManagerService" \
+        "${EXTRACTED_FIRM_DIR}/system/system/priv-app/SamsungDeviceHealthManagerService"; do
+        if [ -d "$path" ]; then
+            rm -rf "$path"
+            removed=$((removed + 1))
+        fi
+    done
+    find "${EXTRACTED_FIRM_DIR}/system" -type f \
+        \( -iname '*SamsungDeviceHealthManagerService*.apk' -o \
+           -iname '*SamsungDeviceHealthManagerService*.odex' -o \
+           -iname '*SamsungDeviceHealthManagerService*.vdex' \) -delete 2>/dev/null || true
+    echo "- A52s SDHMS: disabled because native SIOP tables are absent (${removed} package path(s) removed)"
+}
 DISABLE_A52SXQ_DONOR_SOUNDTRIGGER() {
     if [ "$#" -ne 1 ]; then
         echo "Usage: ${FUNCNAME[0]} <EXTRACTED_FIRM_DIR>"
@@ -2521,9 +2594,10 @@ APPLY_CUSTOM_FEATURES() {
 	APPLY_CUSTOM_FLOATING_FEATURE "$FLOATING_FEATURE_FILE_DIRECTORY"
 	
 	# Fix samsung device health manager service
-	UPDATE_SDHMS "$EXTRACTED_FIRM_DIR"
-
+		UPDATE_SDHMS "$EXTRACTED_FIRM_DIR"
+    DISABLE_A52SXQ_SDHMS "$EXTRACTED_FIRM_DIR"
 	chown -R "$REAL_USER:$REAL_USER" "$EXTRACTED_FIRM_DIR"
+
     chmod -R u+rwX "$EXTRACTED_FIRM_DIR"
 }
 

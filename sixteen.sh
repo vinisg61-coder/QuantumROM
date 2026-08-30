@@ -48,9 +48,21 @@ source "$(pwd)/scripts/QuantumRom.sh"
 EXTRACT_FIRMWARE "$FIRM_DIR/$TARGET_DEVICE"
 EXTRACT_SUPER_IMG "$FIRM_DIR/$TARGET_DEVICE"
 
+# Keep the donor vendor image available for target-specific camera components
+# before replacing vendor/odm with the native A52s images.
+DONOR_VENDOR_IMG="$WORK_DIR/a52sxq-donor-vendor.img"
+mkdir -p "$WORK_DIR"
+if [ -f "$FIRM_DIR/$TARGET_DEVICE/vendor.img" ]; then
+    cp -af "$FIRM_DIR/$TARGET_DEVICE/vendor.img" "$DONOR_VENDOR_IMG"
+fi
+
 OVERRIDE_STOCK_VENDOR_ODM "$FIRM_DIR/$TARGET_DEVICE"
 
 EXTRACT_FIRMWARE_IMG "$FIRM_DIR/$TARGET_DEVICE" "all"
+
+# Import only the missing donor camera component; keep native A52s HAL and
+# all other native vendor camera libraries intact.
+IMPORT_A52SXQ_CAMERA_MOTION "$FIRM_DIR/$TARGET_DEVICE" "$DONOR_VENDOR_IMG"
 
 DECODE_OMC "$FIRM_DIR/$TARGET_DEVICE" "$WORK_DIR"
 DEBLOAT "$FIRM_DIR/$TARGET_DEVICE"
