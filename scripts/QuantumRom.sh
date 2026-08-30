@@ -2011,6 +2011,41 @@ FIX_CAMERA() {
 }
 
 
+DISABLE_A52SXQ_DONOR_SOUNDTRIGGER() {
+    if [ "$#" -ne 1 ]; then
+        echo "Usage: ${FUNCNAME[0]} <EXTRACTED_FIRM_DIR>"
+        return 1
+    fi
+
+    local EXTRACTED_FIRM_DIR="$1"
+    if [ "$STOCK_DEVICE" != "SM-A528B" ]; then
+        return 0
+    fi
+
+    # The S711B donor audio HAL loads this optional trigger provider. On the
+    # A52s it repeatedly fails LSM model registration (ADSP_EFAILED/-131),
+    # which causes the audio HAL and audioserver to restart. Remove only the
+    # optional trigger provider; normal PCM/media output remains untouched.
+    local removed=0
+    local rel
+    for rel in \
+        "vendor/lib/libaudio_soundtrigger.so" \
+        "vendor/lib64/libaudio_soundtrigger.so"; do
+        if [ -e "${EXTRACTED_FIRM_DIR}/${rel}" ]; then
+            echo "- A52s audio: disabling donor sound-trigger provider ${rel}"
+            rm -f "${EXTRACTED_FIRM_DIR}/${rel}"
+            removed=$((removed + 1))
+        fi
+    done
+
+    # Stop framework hotword initialization from requesting the incompatible
+    # donor trigger path. These target-only properties do not disable media
+    # playback, speaker output, wired audio, or Bluetooth A2DP.
+    BUILD_PROP "$EXTRACTED_FIRM_DIR" "system" "ro.config.hotword_enabled" "false"
+    BUILD_PROP "$EXTRACTED_FIRM_DIR" "vendor" "persist.vendor.audio.sva" "false"
+    BUILD_PROP "$EXTRACTED_FIRM_DIR" "vendor" "vendor.audio.feature.sva.enable" "false"
+    echo "- A52s audio: sound-trigger disabled (${removed} optional provider file(s) removed)"
+}
 PATCH_A52SXQ_CAMERA_CONFIG() {
     if [ "$#" -ne 1 ]; then
         echo "Usage: ${FUNCNAME[0]} <EXTRACTED_FIRM_DIR>"

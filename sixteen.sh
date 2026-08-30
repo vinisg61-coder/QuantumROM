@@ -64,6 +64,7 @@ if [ "$STOCK_DEVICE" = "SM-A528B" ]; then
     python3 "$(pwd)/scripts/patch_a52sxq_compat.py" \
         "$FIRM_DIR/$TARGET_DEVICE" \
         "$STOCK_DEVICE"
+    DISABLE_A52SXQ_DONOR_SOUNDTRIGGER "$FIRM_DIR/$TARGET_DEVICE"
 fi
 
 # Camera fix intentionally disabled for A52s: keep the native camera stack
