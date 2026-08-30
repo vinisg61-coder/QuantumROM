@@ -2022,20 +2022,43 @@ IMPORT_A52SXQ_CAMERA_MOTION() {
     [ "$STOCK_DEVICE" = "SM-A528B" ] || return 0
 
     local donor_file=""
+    local rel=""
     if [ -d "$DONOR_VENDOR_SOURCE/vendor" ]; then
-        donor_file="$DONOR_VENDOR_SOURCE/vendor/lib64/camera/components/libMOTION.so"
-        [ -f "$donor_file" ] || donor_file="$DONOR_VENDOR_SOURCE/vendor/lib/camera/components/libMOTION.so"
+        for cand in             "$DONOR_VENDOR_SOURCE/vendor/lib64/camera/components/libMOTION.so"             "$DONOR_VENDOR_SOURCE/vendor/lib/camera/components/libMOTION.so"; do
+            if [ -f "$cand" ]; then
+                donor_file="$cand"
+                [[ "$donor_file" == */vendor/lib64/camera/components/libMOTION.so ]] && rel="lib64/camera/components/libMOTION.so" || rel="lib/camera/components/libMOTION.so"
+                break
+            fi
+        done
     elif [ -f "$DONOR_VENDOR_SOURCE" ]; then
         command -v debugfs >/dev/null 2>&1 || return 0
-        local tree motion_path tmp
-        tree="$(debugfs -R 'ls -p -r /' "$DONOR_VENDOR_SOURCE" 2>/dev/null || true)"
-        motion_path="$(printf '%s\n' "$tree" | grep -Eo '/lib(64)?/camera/components/libMOTION\.so' | head -n 1 || true)"
-        if [ -n "$motion_path" ]; then
-            tmp="${WORK_DIR:-/tmp}/a52sxq-libMOTION.so"
+        local tmp
+        for cand_rel in             "vendor/lib64/camera/components/libMOTION.so"             "vendor/lib/camera/components/libMOTION.so"; do
+            tmp="${WORK_DIR:-/tmp}/a52sxq-$(basename "$cand_rel")"
             rm -f "$tmp"
-            if debugfs -R "dump $motion_path $tmp" "$DONOR_VENDOR_SOURCE" >/dev/null 2>&1 && [ -s "$tmp" ]; then
+            if debugfs -R "dump /${cand_rel} $tmp" "$DONOR_VENDOR_SOURCE" >/dev/null 2>&1 && [ -s "$tmp" ]; then
                 donor_file="$tmp"
+                [[ "$cand_rel" == vendor/lib64/* ]] && rel="lib64/camera/components/libMOTION.so" || rel="lib/camera/components/libMOTION.so"
+                break
             fi
+        done
+    fi
+
+    # Native A52s stock vendor asset (if present) may already carry the real blob.
+    if [ ! -f "$donor_file" ] && [ -f "${DEVICES_DIR}/${STOCK_DEVICE}/extra/vendor.img" ]; then
+        command -v debugfs >/dev/null 2>&1 || true
+        if command -v debugfs >/dev/null 2>&1; then
+            local extra_tmp
+            for cand_rel in                 "vendor/lib64/camera/components/libMOTION.so"                 "vendor/lib/camera/components/libMOTION.so"; do
+                extra_tmp="${WORK_DIR:-/tmp}/a52sxq-native-$(basename "$cand_rel")"
+                rm -f "$extra_tmp"
+                if debugfs -R "dump /${cand_rel} $extra_tmp" "${DEVICES_DIR}/${STOCK_DEVICE}/extra/vendor.img" >/dev/null 2>&1 && [ -s "$extra_tmp" ]; then
+                    donor_file="$extra_tmp"
+                    [[ "$cand_rel" == vendor/lib64/* ]] && rel="lib64/camera/components/libMOTION.so" || rel="lib/camera/components/libMOTION.so"
+                    break
+                fi
+            done
         fi
     fi
 
@@ -2044,20 +2067,21 @@ IMPORT_A52SXQ_CAMERA_MOTION() {
         return 0
     fi
 
-    local rel dest
-    if [[ "$donor_file" == */vendor/lib64/camera/components/libMOTION.so ]]; then
-        rel="lib64/camera/components/libMOTION.so"
-    else
-        rel="lib/camera/components/libMOTION.so"
-    fi
+    local dest
     dest="${EXTRACTED_FIRM_DIR}/vendor/${rel}"
+    if [ -f "$dest" ]; then
+        echo "- A52s camera: ${rel} already present; keeping existing"
+        [ "$donor_file" != "$dest" ] && rm -f "$donor_file"
+        return 0
+    fi
     mkdir -p "$(dirname "$dest")"
     cp -af "$donor_file" "$dest"
     chmod 0644 "$dest"
     chown "$REAL_USER:$REAL_USER" "$dest" 2>/dev/null || true
     echo "- A52s camera: imported donor ${rel} -> ${dest}"
-    [[ "$donor_file" == "${WORK_DIR:-/tmp}/a52sxq-libMOTION.so" ]] && rm -f "$donor_file"
+    rm -f         "${WORK_DIR:-/tmp}/a52sxq-libMOTION.so"         "${WORK_DIR:-/tmp}/a52sxq-native-libMOTION.so"
 }
+
 DISABLE_A52SXQ_SDHMS() {
     if [ "$#" -ne 1 ]; then
         echo "Usage: ${FUNCNAME[0]} <EXTRACTED_FIRM_DIR>"
