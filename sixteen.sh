@@ -66,13 +66,9 @@ if [ "$STOCK_DEVICE" = "SM-A528B" ]; then
         "$STOCK_DEVICE"
 fi
 
-if [ "$STOCK_DEVICE" = "SM-A528B" ]; then
-    python3 "$(pwd)/scripts/patch_a52sxq_camera_binary.py" \
-        "$FIRM_DIR/$TARGET_DEVICE" \
-        "$STOCK_DEVICE"
-fi
-
-PATCH_A52SXQ_CAMERA_CONFIG "$FIRM_DIR/$TARGET_DEVICE"
+# Camera fix intentionally disabled for A52s: keep the native camera stack
+# untouched while retaining the helper scripts for later controlled testing.
+# The Wi-Fi hotspot patch below remains enabled.
 
 # A52s Wi-Fi resource RRO: disable donor-only 6 GHz/802.11be/bridged AP
 # capability flags while preserving the native HIDL HAL and vendor blobs.
