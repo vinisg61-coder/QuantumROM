@@ -2018,44 +2018,45 @@ IMPORT_A52SXQ_CAMERA_MOTION() {
     fi
 
     local EXTRACTED_FIRM_DIR="$1"
-    local DONOR_VENDOR_IMG="$2"
+    local DONOR_VENDOR_SOURCE="$2"
     [ "$STOCK_DEVICE" = "SM-A528B" ] || return 0
-    [ -f "$DONOR_VENDOR_IMG" ] || {
-        echo "- A52s camera: donor vendor image not found; cannot import libMOTION.so"
-        return 0
-    }
-    command -v debugfs >/dev/null 2>&1 || {
-        echo "- A52s camera: debugfs unavailable; cannot import donor libMOTION.so"
-        return 0
-    }
 
-    local tree motion_path tmp dest
-    tree="$(debugfs -R 'ls -p -r /' "$DONOR_VENDOR_IMG" 2>/dev/null || true)"
-    motion_path="$(printf '%s\n' "$tree" | grep -Eo '/lib(64)?/camera/components/libMOTION\.so' | head -n 1 || true)"
-    if [ -z "$motion_path" ]; then
-        echo "- A52s camera: libMOTION.so not found in donor vendor image"
+    local donor_file=""
+    if [ -d "$DONOR_VENDOR_SOURCE/vendor" ]; then
+        donor_file="$DONOR_VENDOR_SOURCE/vendor/lib64/camera/components/libMOTION.so"
+        [ -f "$donor_file" ] || donor_file="$DONOR_VENDOR_SOURCE/vendor/lib/camera/components/libMOTION.so"
+    elif [ -f "$DONOR_VENDOR_SOURCE" ]; then
+        command -v debugfs >/dev/null 2>&1 || return 0
+        local tree motion_path tmp
+        tree="$(debugfs -R 'ls -p -r /' "$DONOR_VENDOR_SOURCE" 2>/dev/null || true)"
+        motion_path="$(printf '%s\n' "$tree" | grep -Eo '/lib(64)?/camera/components/libMOTION\.so' | head -n 1 || true)"
+        if [ -n "$motion_path" ]; then
+            tmp="${WORK_DIR:-/tmp}/a52sxq-libMOTION.so"
+            rm -f "$tmp"
+            if debugfs -R "dump $motion_path $tmp" "$DONOR_VENDOR_SOURCE" >/dev/null 2>&1 && [ -s "$tmp" ]; then
+                donor_file="$tmp"
+            fi
+        fi
+    fi
+
+    if [ ! -f "$donor_file" ]; then
+        echo "- A52s camera: libMOTION.so not found in donor source"
         return 0
     fi
 
-    case "$motion_path" in
-        /lib64/*) dest="${EXTRACTED_FIRM_DIR}/vendor${motion_path}" ;;
-        /lib/*) dest="${EXTRACTED_FIRM_DIR}/vendor${motion_path}" ;;
-        *) echo "- A52s camera: unsupported libMOTION path ${motion_path}"; return 0 ;;
-    esac
-    # This imports only the missing component and never replaces the native
-    # A52s camera.qcom.so or the rest of the camera HAL.
-    mkdir -p "$(dirname "$dest")"
-    tmp="${WORK_DIR:-/tmp}/a52sxq-libMOTION.so"
-    rm -f "$tmp"
-    if debugfs -R "dump $motion_path $tmp" "$DONOR_VENDOR_IMG" >/dev/null 2>&1 && [ -s "$tmp" ]; then
-        cp -af "$tmp" "$dest"
-        chmod 0644 "$dest"
-        chown "$REAL_USER:$REAL_USER" "$dest" 2>/dev/null || true
-        echo "- A52s camera: imported donor ${motion_path} -> ${dest}"
+    local rel dest
+    if [[ "$donor_file" == */vendor/lib64/camera/components/libMOTION.so ]]; then
+        rel="lib64/camera/components/libMOTION.so"
     else
-        echo "- A52s camera: failed to extract donor ${motion_path}"
+        rel="lib/camera/components/libMOTION.so"
     fi
-    rm -f "$tmp"
+    dest="${EXTRACTED_FIRM_DIR}/vendor/${rel}"
+    mkdir -p "$(dirname "$dest")"
+    cp -af "$donor_file" "$dest"
+    chmod 0644 "$dest"
+    chown "$REAL_USER:$REAL_USER" "$dest" 2>/dev/null || true
+    echo "- A52s camera: imported donor ${rel} -> ${dest}"
+    [[ "$donor_file" == "${WORK_DIR:-/tmp}/a52sxq-libMOTION.so" ]] && rm -f "$donor_file"
 }
 DISABLE_A52SXQ_SDHMS() {
     if [ "$#" -ne 1 ]; then
