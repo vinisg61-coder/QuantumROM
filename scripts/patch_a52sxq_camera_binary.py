@@ -57,11 +57,11 @@ def main() -> int:
         return 0
     if actual_sha != ORIGINAL_SHA256:
         print(
-            "[A52SXQ-CAMERA-BINARY] refusing unexpected blob: "
-            f"{path} sha256={actual_sha} expected={ORIGINAL_SHA256}",
+            "[A52SXQ-CAMERA-BINARY] skipping unexpected blob: "
+            f"{path} sha256={actual_sha},",
             file=sys.stderr,
         )
-        return 1
+        return 0
 
     if PATCH_OFFSET < 4 or PATCH_OFFSET + 8 > len(data):
         print("[A52SXQ-CAMERA-BINARY] patch offset outside blob", file=sys.stderr)

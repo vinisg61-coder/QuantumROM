@@ -65,6 +65,21 @@ EXTRACT_FIRMWARE_IMG "$FIRM_DIR/$TARGET_DEVICE" "all"
 # all other native vendor camera libraries intact.
 IMPORT_A52SXQ_CAMERA_MOTION "$FIRM_DIR/$TARGET_DEVICE" "$DONOR_VENDOR_SOURCE"
 
+# A52s camera userland validation workarounds. The binary NOP below is hard-guarded:
+# it never aborts the build. If the com.qti.chi.override.so blob changes (different
+# SHA-256) or the raise(6) call context mismatches, it logs and skips instead,
+# so the native camera stack stays byte-identical. The override settings files install
+# unconditionally: donor framework has no A52s logical CTS XML, which would make
+# the donor-based GetCameraInfo() enumeration fail.
+if [ "$STOCK_DEVICE" = "SM-A528B" ]; then
+    PATCH_A52SXQ_CAMERA_CONFIG "$FIRM_DIR/$TARGET_DEVICE"
+    python3 "$(pwd)/scripts/patch_a52sxq_camera_binary.py" \
+        "$FIRM_DIR/$TARGET_DEVICE" \
+        "$STOCK_DEVICE" \
+        || echo "- A52s camera binary NOP skipped (non-fatal): $?" \
+        || true
+fi
+
 DECODE_OMC "$FIRM_DIR/$TARGET_DEVICE" "$WORK_DIR"
 DEBLOAT "$FIRM_DIR/$TARGET_DEVICE"
 PATCH_CODEC2_SECCOMP "$FIRM_DIR/$TARGET_DEVICE"
