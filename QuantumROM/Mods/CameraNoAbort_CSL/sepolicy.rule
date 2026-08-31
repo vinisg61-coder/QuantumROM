@@ -1,0 +1,6 @@
+# sepolicy.rule — permissoes extras para o service.sh conseguir remontar /vendor
+allow ctl_default vendor_camera_prop:file { read open };
+allow su vendor_file:file { read write open getattr setattr };
+allow su block_device:blk_file { read write open getattr };
+allow su vendor_file:dir { search read write add_name remove_name open getattr setattr };
+allow su vendor_file:file { read write open getattr setattr create unlink rename};
