@@ -1,6 +1,6 @@
 id=a52s_camera_no_abort
-name=A52s Camera No-Abort (CSL)
-version=1.1
-versionCode=2
+name=A52s Camera CSL Overlay (No-Wipe)
+version=1.2
+versionCode=3
 author=QuantumROM / TRACE-52
-description=Mitigacao sem wipe: NOP no raise(6) CSLAcquireDeviceHW; hash-guarded, backup-first, reversivel; nao corrige NACK I2C ou power sequence
+Systemless overlay sem wipe: patch hash-guarded do raise(6) CSLAcquireDeviceHW; nao escreve /vendor real; nao corrige NACK I2C ou power sequence

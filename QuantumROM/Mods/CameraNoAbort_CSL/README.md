@@ -1,6 +1,6 @@
 # A52s Camera CSL — mitigação sem wipe
 
-Módulo **Magisk/KernelSU** para investigar a falha da câmera 1x sem apagar dados. A instalação não toca em `/data` nem executa wipe.
+Módulo **Magisk/KernelSU v1.2** para investigar a falha da câmera 1x sem apagar dados. A instalação usa overlay systemless, não remonta nem escreve o `/vendor` real, não toca em `/data` e não executa wipe.
 
 ## Escopo técnico
 
@@ -10,11 +10,11 @@ A alteração é uma **mitigação de crash-loop**, não uma correção comprova
 
 ## Instalação sem wipe
 
-No Magisk ou KernelSU, escolha instalar o arquivo `a52s-camera-no-abort-csl.kernelsu.zip` como módulo e reinicie. Não use opções de wipe. O módulo salva backup, verifica a escrita e solicita o restart do camera provider. O log fica em `/data/adb/modules/a52s_camera_no_abort/patch.log`.
+No Magisk ou KernelSU, escolha instalar o arquivo `A52s_Camera_CSL_Overlay_v1.2_Systemless.zip` como módulo e reinicie. Não use opções de wipe. Durante a instalação, o script copia a biblioteca original do aparelho para o diretório privado do módulo, aplica o NOP, confere o SHA-256 e monta o resultado de forma systemless. O log fica em `/data/adb/modules/a52s_camera_no_abort/patch.log`.
 
 ## Remoção e recuperação
 
-Desative/remova o módulo pelo Magisk ou KernelSU e reinicie. O `uninstall.sh` restaura a cópia somente quando o binário atual ainda corresponde ao hash do patch; se o estado for desconhecido, ele não sobrescreve o vendor.
+Desative/remova o módulo pelo Magisk ou KernelSU e reinicie. Como o patch fica somente no overlay, remover o módulo desfaz a alteração no próximo boot; o `uninstall.sh` não remonta nem sobrescreve o vendor.
 
 ## Native CAX v1
 
@@ -24,8 +24,8 @@ O pacote Native CAX v1 não está presente nos artefatos fornecidos e não há m
 
 | Arquivo | Função |
 |---|---|
-| `a52s-camera-no-abort-csl.kernelsu.zip` | Pacote instalável por Magisk/KernelSU |
-| `customize.sh` | Patch durante a instalação |
-| `service.sh` | Verificação e reaplicação no boot |
-| `uninstall.sh` | Restauração condicional |
-| `sepolicy.rule` | Permissões necessárias ao remount |
+| `A52s_Camera_CSL_Overlay_v1.2_Systemless.zip` | Pacote instalável por Magisk/KernelSU |
+| `customize.sh` | Copia, patcha e valida o overlay durante a instalação |
+| `service.sh` | Verifica o overlay no boot sem escrever |
+| `uninstall.sh` | Remove o estado do módulo; rollback por remoção do overlay |
+| `sepolicy.rule` | Nenhuma permissão extra; mantido por compatibilidade |
