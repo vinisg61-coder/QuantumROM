@@ -1,51 +1,31 @@
-# A52S Camera No-Abort (CSL raise NOP)
+# A52s Camera CSL — mitigação sem wipe
 
-Módulo **KernelSU** que elimina o crash (SIGABRT do **main camera provider** (`camera.qcom.so`) **na GCam** quando o `libMOTION.so` (exclusivo da ONE UI stock) não está presente na ROM.
+Módulo **Magisk/KernelSU** para investigar a falha da câmera 1x sem apagar dados. A instalação não toca em `/data` nem executa wipe.
 
-## O que o módulo faz
+## Escopo técnico
 
-O crash é causado por um `raise(6)` disparado em em `CSLAcquireDeviceHW+1764` dentro do `camera.qcom.so` quando o acquire do sensor principal (`/dev/v4l-subdev8`) falha.
+O pacote altera somente o `raise(6)` confirmado no backtrace: `CSLAcquireDeviceHW+1764` dentro de `/vendor/lib64/hw/camera.qcom.so`, BuildId `9b26d985843faf46e36d82967f1c1526`, offset `0xc88b4c` (`49 a1 01 94` → NOP `1f 20 03 d5`). O módulo verifica o SHA-256 original e o SHA-256 pós-patch; em binário desconhecido, recusa a alteração.
 
-. O módulo:
+A alteração é uma **mitigação de crash-loop**, não uma correção comprovada do sensor. Os artefatos mostram também NACK I²C em `0x34`, `rc=-22`, ausência de dados GPIO, sequência de reguladores inconsistente e erros de EEPROM/CRC. Esses sinais ainda precisam de correção/validação no DT/DTBO, vendor e hardware.
 
-1. Detecta o `camera.qcom.so` instalado pelo **SHA-256** do seu binário exato (BuildId `9b26d985843faf46e36d82967f1c1526`);
-2. Faz **backup** (`camera.qcom.so.bak`);
-3. **NOPeia** a instrução `bl raise(6)` no offset `0xc88b4c` (`49 a1 01 94` → `1f 20 03 d5`);
-4. Confere o hash pós-patch (`0de3cc79b89e4263375ba2a82e862d02e0a20135cd3c340c2c5628cb00b7f360`);
-5. Reaplica o patch a cada **boot** (`service.sh`);
-6. Se o hash do binário **não bater** com nenhum dos dois conhecidos — **não mexe em nada** (seguro).
+## Instalação sem wipe
+
+No Magisk ou KernelSU, escolha instalar o arquivo `a52s-camera-no-abort-csl.kernelsu.zip` como módulo e reinicie. Não use opções de wipe. O módulo salva backup, verifica a escrita e solicita o restart do camera provider. O log fica em `/data/adb/modules/a52s_camera_no_abort/patch.log`.
+
+## Remoção e recuperação
+
+Desative/remova o módulo pelo Magisk ou KernelSU e reinicie. O `uninstall.sh` restaura a cópia somente quando o binário atual ainda corresponde ao hash do patch; se o estado for desconhecido, ele não sobrescreve o vendor.
+
+## Native CAX v1
+
+O pacote Native CAX v1 não está presente nos artefatos fornecidos e não há marca inequívoca de sua instalação nos logs. Se esta captura foi feita depois de instalá-lo, o provider continuou abortando e a câmera 0 continuou indisponível; portanto não há progresso funcional demonstrado. Progresso real exigirá sensor ID lido, ausência de NACK e frames 1x entregues.
 
 ## Arquivos
 
 | Arquivo | Função |
 |---|---|
-| `a52s-camera-no-abort-csl.kernelsu.zip` | Zip instalável no KernelSU Manager |
-| `customize.sh` | Patch + restart do provider (roda na instalação) |
-| `service.sh` | Reaplica o patch no boot |
-| `module.prop` | Metadados do módulo |
-| `sepolicy.rule` | Permissões p/ remount do `/vendor` |
-
-## Instalação
-
-1. Baixe `a52s-camera-no-abort-csl.kernelsu.zip` para o celular;
-2. Abra o **KernelSU Manager** → **Módulos** → **⋮** → **Instalar do arquivo**;
-3. Selecione o zip e **reboot**;
-4. A teste: abra a **GCam (1x)** → câmera **principal (0)** → **1 foto**. Verifique se não há mais crash/tela preta.
-
-
-
-## Log
-
-O módulo registra tudo em:
-
-```
-/data/adb/modules/a52s_camera_no_abort/patch.log
-```
-
-## Desinstalação
-
-Basta remover o módulo no KernelSU Manager → reboot. O `service.sh` não roda mais e o `/vendor` volta ao original no boot (o backup `camera.qcom.so.bak` fica no vendor, mas é inofensivo — pode remover com `su -c 'rm /vendor/lib64/hw/camera.qcom.so.bak'`).
-
-## Nota importante
-
-Este patch **não adiciona** o `libMOTION.so` faltante — ele apenas impede que o provider **aborte** quando o sensor falha. Se a GCam continuar preta por outro motivo, o próximo passo é atacar o próximo elo da cadeia (logcat/tombstone).
+| `a52s-camera-no-abort-csl.kernelsu.zip` | Pacote instalável por Magisk/KernelSU |
+| `customize.sh` | Patch durante a instalação |
+| `service.sh` | Verificação e reaplicação no boot |
+| `uninstall.sh` | Restauração condicional |
+| `sepolicy.rule` | Permissões necessárias ao remount |

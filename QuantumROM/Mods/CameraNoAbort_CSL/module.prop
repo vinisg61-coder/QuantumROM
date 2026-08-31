@@ -1,6 +1,6 @@
 id=a52s_camera_no_abort
 name=A52s Camera No-Abort (CSL)
-version=1.0
-versionCode=1
-author=QuantumROM
-description=NOPa o raise(6) no CSLAcquireDeviceHW do camera.qcom.so (BuildId 9b26d985) para o provider de camera NAO abortar quando o acquire do sensor principal falha (evita SIGABRT e tela preta na GCam (1x) sem o libMOTION.so
+version=1.1
+versionCode=2
+author=QuantumROM / TRACE-52
+description=Mitigacao sem wipe: NOP no raise(6) CSLAcquireDeviceHW; hash-guarded, backup-first, reversivel; nao corrige NACK I2C ou power sequence
