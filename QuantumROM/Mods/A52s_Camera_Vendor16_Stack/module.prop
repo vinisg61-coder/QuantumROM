@@ -1,0 +1,7 @@
+id=a52s_camera_vendor16
+name=A52s Camera Vendor 16 Stack
+version=v1.0.0
+versionCode=100
+author=TRACE-52 / QuantumROM
+description=Stock A52s Android 16 camera vendor stack for SM-A528B; systemless, no-wipe
+updateJson=
