@@ -2144,6 +2144,40 @@ DISABLE_A52SXQ_DONOR_SOUNDTRIGGER() {
     BUILD_PROP "$EXTRACTED_FIRM_DIR" "vendor" "vendor.audio.feature.sva.enable" "false"
     echo "- A52s audio: sound-trigger disabled (${removed} optional provider file(s) removed)"
 }
+PATCH_A52SXQ_UN1CA_HEX() {
+    if [ "$#" -ne 1 ]; then
+        echo "Usage: ${FUNCNAME[0]} <EXTRACTED_FIRM_DIR>"
+        return 1
+    fi
+    local EXTRACTED_FIRM_DIR="$1"
+    [ "$STOCK_DEVICE" = "SM-A528B" ] || return 0
+
+    # UN1CA workaround for A52s/rear-SLSI camera lock. Apply only when the
+    # exact source string exists; never patch an unknown camera blob blindly.
+    local FROM="726f2e626f6f742e666c6173682e6c6f636b656400"
+    local TO="726f2e63616d6572612e6e6f746966795f6e666300"
+    local rel file
+    for rel in \
+        "vendor/lib/hw/camera.qcom.so" \
+        "vendor/lib/hw/com.qti.chi.override.so" \
+        "vendor/lib64/hw/camera.qcom.so" \
+        "vendor/lib64/hw/com.qti.chi.override.so"; do
+        file="${EXTRACTED_FIRM_DIR}/${rel}"
+        if [ ! -f "$file" ]; then
+            echo "- A52s UN1CA hex: ${rel} absent; skipped"
+        elif xxd -p -c 0 "$file" | grep -qi "$FROM"; then
+            if HEX_PATCH "$file" "$FROM" "$TO"; then
+                echo "- A52s UN1CA hex: applied to ${rel}"
+            else
+                echo "- A52s UN1CA hex: failed on ${rel} (non-fatal)"
+            fi
+        elif xxd -p -c 0 "$file" | grep -qi "$TO"; then
+            echo "- A52s UN1CA hex: ${rel} already patched"
+        else
+            echo "- A52s UN1CA hex: signature not applicable to ${rel}; skipped"
+        fi
+    done
+}
 PATCH_A52SXQ_CAMERA_CONFIG() {
     if [ "$#" -ne 1 ]; then
         echo "Usage: ${FUNCNAME[0]} <EXTRACTED_FIRM_DIR>"

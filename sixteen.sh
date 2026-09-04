@@ -73,6 +73,7 @@ IMPORT_A52SXQ_CAMERA_MOTION "$FIRM_DIR/$TARGET_DEVICE" "$DONOR_VENDOR_SOURCE"
 # the donor-based GetCameraInfo() enumeration fail.
 if [ "$STOCK_DEVICE" = "SM-A528B" ]; then
     PATCH_A52SXQ_CAMERA_CONFIG "$FIRM_DIR/$TARGET_DEVICE"
+    PATCH_A52SXQ_UN1CA_HEX "$FIRM_DIR/$TARGET_DEVICE"
     python3 "$(pwd)/scripts/patch_a52sxq_camera_binary.py" \
         "$FIRM_DIR/$TARGET_DEVICE" \
         "$STOCK_DEVICE" \
