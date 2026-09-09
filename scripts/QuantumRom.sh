@@ -2429,7 +2429,8 @@ APPLY_CUSTOM_FEATURES() {
 	BUILD_PROP "$EXTRACTED_FIRM_DIR" "system" "ro.product.locale" "en-US"
     BUILD_PROP "$EXTRACTED_FIRM_DIR" "system" "fw.max_users" "5"
     BUILD_PROP "$EXTRACTED_FIRM_DIR" "system" "fw.show_multiuserui" "1"
-    BUILD_PROP "$EXTRACTED_FIRM_DIR" "system" "wifi.interface=" "wlan0"
+    BUILD_PROP "$EXTRACTED_FIRM_DIR" "system" "wifi.interface" "wlan0"
+    BUILD_PROP "$EXTRACTED_FIRM_DIR" "system" "ro.hardware.wlan" "qcom"
     BUILD_PROP "$EXTRACTED_FIRM_DIR" "system" "wlan.wfd.hdcp" "disabled"
     BUILD_PROP "$EXTRACTED_FIRM_DIR" "system" "debug.hwui.renderer" "skiavk"
 	BUILD_PROP "$EXTRACTED_FIRM_DIR" "system" "ro.telephony.sim_slots.count" "2"
@@ -2578,6 +2579,291 @@ PATCH_SAMSUNG_CAMERA_LIBS() {
     cp -f "$LIB_LIST_FILE" "${PORT_ETC_DIR}/public.libraries-camera.samsung.txt"
 
     echo "  - Success: Samsung camera libraries synchronized successfully."
+}
+
+
+PATCH_WIFI_HOTSPOT() {
+    echo " "
+
+    if [ "$#" -ne 1 ]; then
+        echo -e "Usage: ${FUNCNAME[0]} <EXTRACTED_FIRM_DIR>"
+        return 1
+    fi
+
+    local TARGET_DIR="$1"
+
+    if [ "$STOCK_DEVICE" != "SM-A528B" ]; then
+        echo "- Skipping WiFi/HOTSPOT patch (non-A52s device)."
+        return 0
+    fi
+
+    echo "- Patching WiFi Hotspot for A52s..."
+
+    local STOCK_SYS="${DEVICES_DIR}/$STOCK_DEVICE/Stock/system/system"
+    local PORT_VENDOR="${TARGET_DIR}/vendor"
+    local PORT_SYSTEM="${TARGET_DIR}/system/system"
+
+    # 1. Preserve native A52s vendor wifi configs from Stock tree
+    if [ -d "${STOCK_SYS}/etc/wifi" ]; then
+        mkdir -p "${PORT_SYSTEM}/etc/wifi"
+        cp -rf "${STOCK_SYS}/etc/wifi/." "${PORT_SYSTEM}/etc/wifi/"
+        echo "    -> Synced system/etc/wifi from Stock"
+    fi
+
+    # 2. Preserve vendor wifi configs (hostapd, wpa_supplicant, CNSS)
+    if [ -d "${PORT_VENDOR}/etc/wifi" ]; then
+        echo "    -> Vendor wifi configs present in ${PORT_VENDOR}/etc/wifi"
+        # Ensure hostapd config exists
+        if [ ! -f "${PORT_VENDOR}/etc/hostapd/hostapd.conf" ]; then
+            mkdir -p "${PORT_VENDOR}/etc/hostapd"
+            cat > "${PORT_VENDOR}/etc/hostapd/hostapd.conf" << 'HOTSPOT_EOF'
+interface=wlan0
+driver=nl80211
+logger_syslog=-1
+logger_syslog_level=2
+logger_stdout=-1
+logger_stdout_level=2
+ctrl_interface=/data/vendor/wifi/hostapd/sockets
+eap_server=0
+wps_state=2
+country_code=US
+hw_mode=g
+channel=6
+max_num_sta=8
+HOTSPOT_EOF
+            echo "    -> Created vendor/etc/hostapd/hostapd.conf"
+        fi
+    else
+        echo "    -> No vendor/etc/wifi found; relying on vendor.img defaults"
+    fi
+
+    # 3. Remove donor Exynos wifi overlays that conflict with sm7325
+    rm -f "${TARGET_DIR}/product/overlay/"*wifi*.apk 2>/dev/null
+    rm -f "${TARGET_DIR}/product/overlay/"*Wifi*.apk 2>/dev/null
+
+    # 4. Ensure product wifi configs are present
+    if [ -d "${STOCK_SYS}/product/etc/wifi" ]; then
+        mkdir -p "${TARGET_DIR}/product/etc/wifi"
+        cp -rf "${STOCK_SYS}/product/etc/wifi/." "${TARGET_DIR}/product/etc/wifi/"
+        echo "    -> Synced product/etc/wifi from Stock"
+    fi
+
+    # 5. Add wlan/wificond init rc if missing
+    if [ -f "${STOCK_VENDOR}/etc/init/wlan_led_service.rc" ]; then
+        mkdir -p "${PORT_VENDOR}/etc/init"
+        cp -f "${STOCK_VENDOR}/etc/init/wlan_led_service.rc" "${PORT_VENDOR}/etc/init/" 2>/dev/null
+    fi
+
+    echo "    -> WiFi Hotspot patch applied for A52s"
+}
+
+
+PATCH_AUDIO_A52S() {
+    echo " "
+
+    if [ "$#" -ne 1 ]; then
+        echo -e "Usage: ${FUNCNAME[0]} <EXTRACTED_FIRM_DIR>"
+        return 1
+    fi
+
+    local TARGET_DIR="$1"
+
+    if [ "$STOCK_DEVICE" != "SM-A528B" ]; then
+        echo "- Skipping audio patch (non-A52s device)."
+        return 0
+    fi
+
+    echo "- Patching Audio for A52s..."
+
+    local STOCK_VENDOR="${DEVICES_DIR}/$STOCK_DEVICE/Stock/vendor"
+    local PORT_VENDOR="${TARGET_DIR}/vendor"
+    local STOCK_SYS="${DEVICES_DIR}/$STOCK_DEVICE/Stock/system/system"
+    local PORT_SYSTEM="${TARGET_DIR}/system/system"
+
+    # 1. Preserve native vendor audio configs (mixer_paths, audio_policy)
+    local AUDIO_CONFIGS=(
+        "etc/mixer_paths.xml"
+        "etc/mixer_paths_lahaina.xml"
+        "etc/mixer_paths_wcd938x.xml"
+        "etc/mixer_paths_wcd937x.xml"
+        "etc/audio_policy_configuration.xml"
+        "etc/audio_policy_configuration_bluetooth.xml"
+        "etc/audio_policy_configuration_nearfield.xml"
+        "etc/audio_policy_engine_configuration.xml"
+        "etc/audio_policy_volumes.xml"
+        "etc/default_volume_tables.xml"
+        "etc/audio_effects.xml"
+        "etc/soundtrigger_hw.xml"
+    )
+
+    for cfg in "${AUDIO_CONFIGS[@]}"; do
+        if [ -f "${STOCK_VENDOR}/${cfg}" ]; then
+            mkdir -p "$(dirname "${PORT_VENDOR}/${cfg}")"
+            cp -f "${STOCK_VENDOR}/${cfg}" "${PORT_VENDOR}/${cfg}"
+            echo "    -> Synced vendor/${cfg}"
+        fi
+    done
+
+    # 2. Preserve vendor audio HAL libs
+    local AUDIO_LIBS=(
+        "lib/hw/audio.primary.lahaina.so"
+        "lib64/hw/audio.primary.lahaina.so"
+        "lib/hw/audio.r_submix.lahaina.so"
+        "lib64/hw/audio.r_submix.lahaina.so"
+        "lib/hw/audio.bluetooth.lahaina.so"
+        "lib64/hw/audio.bluetooth.lahaina.so"
+    )
+
+    for lib in "${AUDIO_LIBS[@]}"; do
+        if [ -f "${STOCK_VENDOR}/${lib}" ]; then
+            mkdir -p "$(dirname "${PORT_VENDOR}/${lib}")"
+            cp -f "${STOCK_VENDOR}/${lib}" "${PORT_VENDOR}/${lib}"
+            echo "    -> Synced vendor/${lib}"
+        fi
+    done
+
+    # 3. Preserve vendor soundtrigger libs
+    if [ -d "${STOCK_VENDOR}/lib/soundfx" ]; then
+        mkdir -p "${PORT_VENDOR}/lib/soundfx"
+        cp -rf "${STOCK_VENDOR}/lib/soundfx/." "${PORT_VENDOR}/lib/soundfx/"
+        echo "    -> Synced vendor/lib/soundfx"
+    fi
+    if [ -d "${STOCK_VENDOR}/lib64/soundfx" ]; then
+        mkdir -p "${PORT_VENDOR}/lib64/soundfx"
+        cp -rf "${STOCK_VENDOR}/lib64/soundfx/." "${PORT_VENDOR}/lib64/soundfx/"
+        echo "    -> Synced vendor/lib64/soundfx"
+    fi
+
+    # 4. Preserve SoundBooster system libs
+    local SOUND_BOOSTER_LIBS=(
+        "lib64/lib_SoundBooster_ver1050.so"
+        "lib/lib_SoundBooster_ver1050.so"
+        "lib64/libsamsungSoundbooster_plus_legacy.so"
+        "lib/libsamsungSoundbooster_plus_legacy.so"
+    )
+
+    for lib in "${SOUND_BOOSTER_LIBS[@]}"; do
+        if [ -f "${STOCK_SYS}/${lib}" ]; then
+            mkdir -p "$(dirname "${PORT_SYSTEM}/${lib}")"
+            cp -f "${STOCK_SYS}/${lib}" "${PORT_SYSTEM}/${lib}"
+            echo "    -> Synced system/${lib}"
+        fi
+    done
+
+    # 5. Preserve audio permissions
+    find "${STOCK_SYS}/etc/permissions/" -type f -iname "*audio*" 2>/dev/null | while read -r file; do
+        mkdir -p "${PORT_SYSTEM}/etc/permissions"
+        cp -f "$file" "${PORT_SYSTEM}/etc/permissions/$(basename "$file")"
+        echo "    -> Synced $(basename "$file")"
+    done
+
+    # 6. Sync floating feature audio keys from Stock device
+    local FLOATING_FEATURE_FILE="${PORT_SYSTEM}/etc/floating_feature.xml"
+    if [ -f "$FLOATING_FEATURE_FILE" ] && [ -f "${STOCK_VENDOR}/etc/floating_feature.xml" ]; then
+        local FF_KEYS=(
+            "SEC_FLOATING_FEATURE_AUDIO_CONFIG_VOLUMEMONITOR_STAGE"
+            "SEC_FLOATING_FEATURE_AUDIO_CONFIG_VOLUMEMONITOR_GAIN"
+            "SEC_FLOATING_FEATURE_AUDIO_CONFIG_SOUNDALIVE_VERSION"
+            "SEC_FLOATING_FEATURE_AUDIO_SUPPORT_DUAL_SPEAKER"
+            "SEC_FLOATING_FEATURE_AUDIO_NUMBER_OF_SPEAKER"
+            "SEC_FLOATING_FEATURE_AUDIO_CONFIG_REMOTE_MIC"
+            "SEC_FLOATING_FEATURE_AUDIO_SUPPORT_VOLUME_MONITOR"
+        )
+        for key in "${FF_KEYS[@]}"; do
+            local val
+            val=$(awk -F'[<>]' -v k="$key" '$2 == k {print $3}' "${STOCK_VENDOR}/etc/floating_feature.xml" | tr -d '\r' | xargs)
+            if [ -n "$val" ]; then
+                UPDATE_FLOATING_FEATURE "$FLOATING_FEATURE_FILE" "$key" "$val"
+            fi
+        done
+        echo "    -> Synced floating feature audio keys from Stock"
+    fi
+
+    echo "    -> Audio patch applied for A52s"
+}
+
+
+PATCH_CAMERA_A52S() {
+    echo " "
+
+    if [ "$#" -ne 1 ]; then
+        echo -e "Usage: ${FUNCNAME[0]} <EXTRACTED_FIRM_DIR>"
+        return 1
+    fi
+
+    local TARGET_DIR="$1"
+
+    if [ "$STOCK_DEVICE" != "SM-A528B" ]; then
+        echo "- Skipping A52s camera hex patches (non-A52s device)."
+        return 0
+    fi
+
+    echo "- Applying A52s camera hex patches..."
+
+    # 1. Patch camera.qcom.so: replace bootloader unlock check prop
+    #    ro.boot.flash.locked -> ro.camera.notify_nfc
+    #    This prevents camera crash on unlocked bootloader
+    local CAMERA_QCOM="${TARGET_DIR}/vendor/lib64/hw/camera.qcom.so"
+    if [ -f "$CAMERA_QCOM" ]; then
+        local FROM_HEX="726f2e626f6f742e666c6173682e6c6f636b6564"
+        local TO_HEX="726f2e63616d6572612e6e6f746966795f6e6663"
+        HEX_PATCH "$CAMERA_QCOM" "$FROM_HEX" "$TO_HEX" || {
+            echo "    -> Warning: camera.qcom.so hex patch failed or pattern not found"
+        }
+    else
+        echo "    -> Warning: camera.qcom.so not found at ${CAMERA_QCOM}"
+    fi
+
+    # 2. Patch com.qti.chi.override.so: NOP RILD CONNECT calls
+    local CHI_OVERRIDE="${TARGET_DIR}/vendor/lib64/hw/com.qti.chi.override.so"
+    if [ -f "$CHI_OVERRIDE" ]; then
+        local NOP_ARM64="1f2003d51f2003d51f2003d51f2003d51f2003d51f2003d51f2003d51f2003d5"
+        HEX_PATCH "$CHI_OVERRIDE" \
+            "800640f92f79009480010034a2dbffb0c3ddffd0a5dcfff0e603002a" \
+            "$NOP_ARM64" || true
+        HEX_PATCH "$CHI_OVERRIDE" \
+            "428c279163741491a5ac2691a4118052e0031f2a210080528dfeff97800640f9" \
+            "${NOP_ARM64}800640f9" || true
+        echo "    -> Patched com.qti.chi.override.so"
+    fi
+
+    # 3. Patch libDualCamBokehCapture: replace ro.product.name with ro.unica.camera
+    #    Portrait mode validates device model and crashes on cross-device firmware
+    local DUALCAM_LIBS=(
+        "vendor/lib64/libDualCamBokehCapture.camera.samsung.so"
+        "vendor/lib/libDualCamBokehCapture.camera.samsung.so"
+        "vendor/lib64/libDepthMapBufferMaker.camera.samsung.so"
+        "vendor/lib/libDepthMapBufferMaker.camera.samsung.so"
+        "vendor/lib64/libSingleTakeBokeh.camera.samsung.so"
+        "vendor/lib/libSingleTakeBokeh.camera.samsung.so"
+    )
+    local BOKEH_FROM="726f2e70726f647563742e6e616d6500"
+    local BOKEH_TO="726f2e756e6963612e63616d65726100"
+
+    for lib in "${DUALCAM_LIBS[@]}"; do
+        local LIB_PATH="${TARGET_DIR}/${lib}"
+        if [ -f "$LIB_PATH" ]; then
+            HEX_PATCH "$LIB_PATH" "$BOKEH_FROM" "$BOKEH_TO" || {
+                echo "    -> Warning: ${lib} hex patch failed or pattern not found"
+            }
+        fi
+    done
+
+    # 4. Patch libobjectcapture_jni.arcsoft.so: bypass ro.product.device validation
+    local OBJCAP_LIB="${TARGET_DIR}/vendor/lib64/libobjectcapture_jni.arcsoft.so"
+    if [ -f "$OBJCAP_LIB" ]; then
+        # A52s is not r0/g0/b0 (flagship) and not a56 - use bypass for cross-device
+        HEX_PATCH "$OBJCAP_LIB" "e503162a" "85008052" || true
+        HEX_PATCH "$OBJCAP_LIB" "e203162a" "82008052" || true
+        echo "    -> Patched libobjectcapture_jni.arcsoft.so"
+    fi
+
+    # 5. Set ro.unica.camera property
+    local TARGET_SYSTEM_NAME
+    TARGET_SYSTEM_NAME=$(getprop ro.product.name 2>/dev/null || echo "a52sxqxx")
+    BUILD_PROP "$TARGET_DIR" "vendor" "ro.unica.camera" "$TARGET_SYSTEM_NAME"
+
+    echo "    -> A52s camera patches applied successfully"
 }
 
 
