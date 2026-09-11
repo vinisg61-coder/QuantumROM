@@ -198,20 +198,29 @@ jobs:
             "${{ github.event.inputs.OUTPUT_FILESYSTEM }}"
 
       - name: Compress all .img & make zip file before upload.
+        env:
+          STOCK_DEVICE: ${{ github.event.inputs.STOCK_DEVICE }}
+          TARGET_DEVICE: ${{ github.event.inputs.TARGET_DEVICE }}
         run: |
-          export STOCK_DEVICE="${{ github.event.inputs.STOCK_DEVICE }}"
-          export TARGET_DEVICE="${{ github.event.inputs.TARGET_DEVICE }}"
+          ls -lah OUT/
+          echo "---"
           bash scripts/flashable_zip.sh
+          echo "---"
+          echo "Contents of OUT/ after flashable_zip.sh:"
+          ls -lah OUT/
 
       - name: Upload to Pixeldrain
         if: ${{ github.event.inputs.PIXELDRAIN_API_KEY != '' }}
         env:
           PIXELDRAIN_API_KEY: ${{ github.event.inputs.PIXELDRAIN_API_KEY }}
         run: |
-          ZIP_PATH="$(find OUT -name \"QuantumROM*.zip\" | head -n1)"
+          echo "Contents of OUT/:"
+          ls -lah OUT/
+          ZIP_PATH="$(find OUT -maxdepth 1 -name "QuantumROM*.zip" -type f | head -n1)"
 
           if [ -z "$ZIP_PATH" ]; then
-            echo "❌ No zip found in OUT/ to upload."
+            echo "❌ No zip found in OUT/ to upload. Listing OUT/ contents:"
+            ls -lah OUT/
             exit 1
           fi
 
@@ -239,7 +248,7 @@ jobs:
           echo "========================================"
           echo "         QuantumROM Build Complete"
           echo "========================================"
-          ZIP_NAME="$(find OUT -name \"QuantumROM*.zip\" -printf '%f\\n' | head -n1)"
+          ZIP_NAME="$(find OUT -maxdepth 1 -name "QuantumROM*.zip" -type f -printf '%f\n' | head -n1)"
           echo "📦 ROM: $ZIP_NAME"
           if [ -n "${PD_LINK:-}" ]; then
             echo "🔗 Pixeldrain: $PD_LINK"
