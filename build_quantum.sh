@@ -155,7 +155,7 @@ APT_DEPS=(
     build-essential android-sdk-libsparse-utils f2fs-tools
     fuse2fs fuse e2fsprogs python3 python3-pip
     zipalign unzip openjdk-21-jdk jq perl xxd kmod erofs-utils
-    "linux-modules-extra-$(uname -r)"
+    #"linux-modules-extra-$(uname -r)"
 )
 
 log "Checking system dependencies..."
@@ -282,8 +282,8 @@ if [[ "$CREATE_FLASHABLE_ZIP" == "true" ]]; then
     [[ -f "$FLASHABLE_SCRIPT" ]] || die "flashable_zip.sh not found at: $FLASHABLE_SCRIPT"
     export QT_DIR="$SCRIPT_DIR" DEVICES_DIR="$SCRIPT_DIR/QuantumROM/Devices" \
            OUT_DIR STOCK_DEVICE TARGET_DEVICE lpmake BUILD_TIME ZIP_DATE
-    bash "$FLASHABLE_SCRIPT"
-    ZIP_PATH="$OUT_DIR/QuantumROM-${STOCK_DEVICE}-${ZIP_DATE}.zip"
+    source "$FLASHABLE_SCRIPT"
+    ZIP_PATH="$OUT_DIR/QuantumROM-${ROM_CODENAME}_${ROM_VERSION}_${STOCK_DEVICE}_${TODAY}.zip"
     ok "Flashable zip done."
 else
     log "Generating images zip..."

@@ -40,10 +40,12 @@ if grep -q '^STOCK_HAS_SEPARATE_SYSTEM_EXT=FALSE' "$DEVICE_CONFIG"; then
     export BUILD_PARTITIONS="product,system,vendor,odm"
     echo "[TARGET] ${STOCK_DEVICE}: using merged system_ext layout; BUILD_PARTITIONS=${BUILD_PARTITIONS}"
 fi
+export EXTRA_BLOBS_DIR="$(pwd)/QuantumROM/extra_blobs"
 
 # Source
 source "$(pwd)/scripts/debloat.sh"
 source "$(pwd)/scripts/QuantumRom.sh"
+source "$(pwd)/scripts/unica_camera.sh"
 
 EXTRACT_FIRMWARE "$FIRM_DIR/$TARGET_DEVICE"
 EXTRACT_SUPER_IMG "$FIRM_DIR/$TARGET_DEVICE"
@@ -95,7 +97,6 @@ RECOMPILE "$APKTOOL" "$FIRM_DIR/$TARGET_DEVICE/system/system/framework" "$WORK_D
 mv -f "$WORK_DIR"/*.jar "$FIRM_DIR/$TARGET_DEVICE/system/system/framework/"
 
 PATCH_BT_LIB "$FIRM_DIR/$TARGET_DEVICE" "$WORK_DIR"
-PATCH_SAMSUNG_CAMERA_LIBS "$FIRM_DIR/$TARGET_DEVICE"
 PATCH_SYSTEM_NFC_STACK "$FIRM_DIR/$TARGET_DEVICE"
 
 # A52s-specific patches for camera, hotspot, and audio
@@ -105,10 +106,16 @@ PATCH_AUDIO_A52S "$FIRM_DIR/$TARGET_DEVICE"
 
 DISABLE_SECURITY "$FIRM_DIR/$TARGET_DEVICE"
 
+APPLY_CAMERADATA_PATCH "$FIRM_DIR/$TARGET_DEVICE"
+PATCH_SAMSUNG_CAMERA_LIBS "$FIRM_DIR/$TARGET_DEVICE"
+APPLY_CAMERA_PATCH "$EXTRA_BLOBS_DIR" "$FIRM_DIR/$TARGET_DEVICE"
+PATCH_SAMSUNG_CAMERA "$FIRM_DIR/$TARGET_DEVICE"
+
 B_ID="$(grep -m1 '^ro.system.build.id=' "$FIRM_DIR/$TARGET_DEVICE/system/system/build.prop" | cut -d= -f2 | tr -d '\r')"
 B_V="$(grep -m1 '^ro.system.build.version.incremental=' "$FIRM_DIR/$TARGET_DEVICE/system/system/build.prop" | cut -d= -f2 | tr -d '\r')"
 BUILD_PROP "$FIRM_DIR/$TARGET_DEVICE" "system" "ro.build.display.id" "QuantumROM Aurora - 1.0.0 (${B_ID}.${B_V})"
 BUILD_PROP "$FIRM_DIR/$TARGET_DEVICE" "product" "ro.build.display.id" "QuantumROM Aurora - 1.0.0 (${B_ID}.${B_V})"
+FIX_HFR "$FIRM_DIR/$TARGET_DEVICE"
 
 BUILD_IMG "$FIRM_DIR/$TARGET_DEVICE" "all" "$OUTPUT_FILESYSTEM" "$OUT_DIR"
 if ! BUILD_SUPER_IMG "$OUT_DIR" "$OUT_DIR"; then

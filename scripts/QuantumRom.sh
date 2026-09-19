@@ -1307,6 +1307,21 @@ ADD_SYSTEM_EXT_IN_SYSTEM_ROOT() {
 }
 
 
+FIX_HFR() {
+    if [ "$#" -ne 1 ]; then
+        echo -e "Usage: ${FUNCNAME[0]} <EXTRACTED_FIRM_DIR>"
+        return 1
+    fi
+
+    local EXTRACTED_FIRM_DIR="$1"
+
+	echo "- Setting HFR props (Tks LofiA15)"
+    BUILD_PROP "$FIRM_DIR/$TARGET_DEVICE" "vendor" "ro.surface_flinger.use_content_detection_for_refresh_rate" "false"
+    BUILD_PROP "$FIRM_DIR/$TARGET_DEVICE" "vendor" "ro.surface_flinger.enable_frame_rate_override" "false"
+
+}
+
+
 SEPARATE_SYSTEM_EXT() {
     if [ "$#" -ne 1 ]; then
         echo -e "Usage: ${FUNCNAME[0]} <EXTRACTED_FIRM_DIR>"
@@ -1881,9 +1896,16 @@ APPLY_STOCK_ROM_FLOATING_FEATURE() {
     "SEC_FLOATING_FEATURE_CAMERA_CONFIG_CAMID_UW" \
     "$(GET_FF_VALUE "SEC_FLOATING_FEATURE_CAMERA_CONFIG_CAMID_UW" "$STOCK_ROM_FLOATING_FEATURE")"
 
+<<<<<<< HEAD
     UPDATE_FLOATING_FEATURE "$FLOATING_FEATURE_FILE_DIRECTORY" \
     "SEC_FLOATING_FEATURE_CAMERA_CONFIG_VENDOR_LIB_INFO" \
     "$(GET_FF_VALUE "SEC_FLOATING_FEATURE_CAMERA_CONFIG_VENDOR_LIB_INFO" "$STOCK_ROM_FLOATING_FEATURE")"
+=======
+# camera fix
+    UPDATE_FLOATING_FEATURE "$FLOATING_FEATURE_FILE_DIRECTORY" \
+    "SEC_FLOATING_FEATURE_CAMERA_CONFIG_VENDOR_LIB_INFO" \
+    "$(GET_FF_VALUE "SEC_FLOATING_FEATURE_CAMERA_CONFIG_VENDOR_LIB_INFO" "$STOCK_ROM_FLOATING_FEATURE,image_codec.samsung.v2")"
+>>>>>>> 6f4beaa (ALOT of fixes)
 
     UPDATE_FLOATING_FEATURE "$FLOATING_FEATURE_FILE_DIRECTORY" \
     "SEC_FLOATING_FEATURE_CAMERA_CONFIG_CORE_VERSION" \
@@ -1893,6 +1915,80 @@ APPLY_STOCK_ROM_FLOATING_FEATURE() {
     "SEC_FLOATING_FEATURE_CAMERA_CONFIG_PERSONALIZATION" \
     "$(GET_FF_VALUE "SEC_FLOATING_FEATURE_CAMERA_CONFIG_PERSONALIZATION" "$STOCK_ROM_FLOATING_FEATURE")"
 
+<<<<<<< HEAD
+=======
+}
+
+
+APPLY_CAMERADATA_PATCH() {
+    echo " "
+
+    if [ "$#" -ne 1 ]; then
+        echo -e "Usage: ${FUNCNAME[0]} <WORK_DIR>"
+        return 1
+    fi
+
+    local WORK_DIR="$1"
+
+    if [ ! -d "$WORK_DIR" ]; then
+        echo -e "- Directory not found: $WORK_DIR"
+        return 1
+    fi
+
+    local STOCK_DIR="$DEVICES_DIR/$STOCK_DEVICE/Stock"
+
+    if [ ! -d "$STOCK_DIR" ]; then
+        echo -e "- Stock directory not found: $STOCK_DIR"
+        return 1
+    fi
+
+    echo -e "- Applying Full CameraData Patch..."
+
+    # --------------------------------------------------------------------------
+    # 1. Locate the cameradata folder in the Stock ROM (Supports multiple structures)
+    # --------------------------------------------------------------------------
+    local STOCK_CAMERADATA=""
+
+    if [ -d "$STOCK_DIR/system/system/cameradata" ]; then
+        STOCK_CAMERADATA="$STOCK_DIR/system/system/cameradata"
+    elif [ -d "$STOCK_DIR/system/cameradata" ]; then
+        STOCK_CAMERADATA="$STOCK_DIR/system/cameradata"
+    fi
+
+    if [ -z "$STOCK_CAMERADATA" ]; then
+        echo -e "  [MISSING] 'cameradata' directory not found in Stock folder!"
+        return 1
+    fi
+
+    # --------------------------------------------------------------------------
+    # 2. Define target path in the Port ROM
+    # --------------------------------------------------------------------------
+    local DEST_CAMERADATA="$WORK_DIR/system/system/cameradata"
+    if [ ! -d "$WORK_DIR/system/system" ]; then
+        DEST_CAMERADATA="$WORK_DIR/system/cameradata"
+    fi
+
+    # --------------------------------------------------------------------------
+    # 3. Clean old Port cameradata and copy full Stock cameradata
+    # --------------------------------------------------------------------------
+    echo -e "  - Cleaning old Port 'cameradata'..."
+    rm -rf "$DEST_CAMERADATA"
+
+    echo -e "  - Copying full Stock 'cameradata'..."
+    mkdir -p "$DEST_CAMERADATA"
+    cp -af "$STOCK_CAMERADATA/." "$DEST_CAMERADATA/"
+
+    # --------------------------------------------------------------------------
+    # 4. Set permissions and SELinux context
+    # --------------------------------------------------------------------------
+    if declare -f SET_METADATA >/dev/null; then
+        SET_METADATA "system" "system/cameradata" 0 0 755 "u:object_r:system_file:s0"
+    else
+        chmod -R 755 "$DEST_CAMERADATA"
+    fi
+
+    echo -e "- Full CameraData patch applied successfully!"
+>>>>>>> 6f4beaa (ALOT of fixes)
 }
 
 

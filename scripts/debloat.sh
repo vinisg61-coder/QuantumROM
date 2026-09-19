@@ -109,6 +109,7 @@ DEBLOAT() {
         fi
 
         if [ -e "$full_path" ] || [ -L "$full_path" ]; then
+            echo "- Removing: $part/$path"
             rm -rf "$full_path"
         fi
     }
@@ -152,7 +153,7 @@ DEBLOAT() {
         "MCFDeviceSync" "Moments" "OdaService" "PrivateAccessTokens" "SafetyInformation"
         "SDMConfig"
         # from original
-        "HMT" "DigitalWellbeing" "FactoryCameraFB" "WlanTest" "AirGlance"
+        "HMT" "FactoryCameraFB" "WlanTest" "AirGlance"
         "AirReadingGlass" "AndroidGlassesCore" "SOAgent77" "ARCore" "ARDrawing"
         "ARZone" "BGMProvider" "SingleTakeService" "BixbyWakeup" "Fast" "FunModeSDK"
         "KidsHome_Installer" "LinkSharing_v11" "MdecService" "MoccaMobile"
@@ -292,7 +293,7 @@ DEBLOAT() {
     # Removido do debloat: OfflineLanguageModel_stub, AndroidSystemIntelligence, SamsungSmartSuggestions
     BLOAT_TARGETS+=(
         "SamsungCalendar" "ClockPackage" "MinusOnePage" "SmartReminder"
-        "Notes40" "SBrowser" "DigitalWellbeing" "GearManagerStub"
+        "Notes40" "SBrowser" "GearManagerStub"
     )
 
     # Samsung Pass & biometric security
@@ -378,7 +379,11 @@ DEBLOAT() {
 
     # ── 5. Dynamic removal across all sub-partitions ──────────────────────────
     for app_name in "${BLOAT_TARGETS[@]}"; do
-        find "${TARGET_DIR}" -type d -name "$app_name" -exec rm -rf {} + >/dev/null 2>&1
+        while IFS= read -r found_dir; do
+            [ -n "$found_dir" ] || continue
+            echo "- Removing app: $app_name ($found_dir)"
+            rm -rf "$found_dir"
+        done < <(find "${TARGET_DIR}" -type d -name "$app_name" 2>/dev/null)
     done
 
     # ── 6. Wipe stock recovery overwrite scripts ──────────────────────────────
