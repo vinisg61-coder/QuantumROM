@@ -31,6 +31,18 @@ on:
         description: "Exact QuantumROM donor firmware version"
         required: true
         default: "S711BXXSFGZE2/S711BOXMFGZE2/S711BXXSFGZE2/S711BXXSFGZE2"
+      STOCK_DEVICE_IMEI:
+        description: "Stock device IMEI (enables stock firmware download for camera/NFC stock sync; blank = donor fallbacks)"
+        required: false
+        default: ""
+      STOCK_DEVICE_CSC:
+        description: "Stock device CSC"
+        required: false
+        default: "EUX"
+      STOCK_FW_VERSION:
+        description: "Exact stock firmware version (blank = latest)"
+        required: false
+        default: ""
       PIXELDRAIN_API_KEY:
         description: "Pixeldrain API key (optional — leave blank to skip upload)"
         required: false
@@ -69,6 +81,15 @@ jobs:
         run: |
           source scripts/QuantumRom.sh
           DOWNLOAD_FIRMWARE "${{ github.event.inputs.TARGET_DEVICE }}" "${{ github.event.inputs.TARGET_DEVICE_CSC }}" "${{ github.event.inputs.TARGET_DEVICE_IMEI }}" "FW" "${{ github.event.inputs.TARGET_FW_VERSION }}"
+
+      - name: Download stock firmware ▶️ ${{ github.event.inputs.STOCK_DEVICE }}
+        run: |
+          source scripts/QuantumRom.sh
+          if [ -z "${{ github.event.inputs.STOCK_DEVICE_IMEI }}" ] || [ "${{ github.event.inputs.STOCK_DEVICE }}" = "None" ]; then
+            echo "ℹ️ No STOCK_DEVICE_IMEI given — camera/NFC stock sync will use donor fallbacks. Skipping."
+            exit 0
+          fi
+          DOWNLOAD_FIRMWARE "${{ github.event.inputs.STOCK_DEVICE }}" "${{ github.event.inputs.STOCK_DEVICE_CSC }}" "${{ github.event.inputs.STOCK_DEVICE_IMEI }}" "FW" "${{ github.event.inputs.STOCK_FW_VERSION }}"
 
       - name: Extract firmware
         run: |

@@ -54,6 +54,12 @@ OVERRIDE_STOCK_VENDOR_ODM "$FIRM_DIR/$TARGET_DEVICE"
 
 EXTRACT_FIRMWARE_IMG "$FIRM_DIR/$TARGET_DEVICE" "all"
 
+# Populate Devices/<STOCK>/Stock/ from downloaded stock firmware (camera/NFC).
+# Skipped silently when no stock firmware was downloaded (donor fallbacks).
+if [ "$STOCK_DEVICE" != "None" ]; then
+    PREPARE_STOCK_TREE "$STOCK_DEVICE" "$FIRM_DIR/$STOCK_DEVICE"
+fi
+
 DECODE_OMC "$FIRM_DIR/$TARGET_DEVICE" "$WORK_DIR"
 DEBLOAT "$FIRM_DIR/$TARGET_DEVICE"
 PATCH_CODEC2_SECCOMP "$FIRM_DIR/$TARGET_DEVICE"

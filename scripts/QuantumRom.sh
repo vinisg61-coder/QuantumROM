@@ -430,6 +430,48 @@ EXTRACT_SUPER_IMG() {
 }
 
 
+# Populate QuantumROM/Devices/<STOCK>/Stock/ from a downloaded stock firmware
+# (system partition only: cameradata, stock APKs, permissions/sysconfig).
+# Skipped silently when no stock firmware was downloaded — camera/NFC stock
+# sync then uses donor fallbacks.
+PREPARE_STOCK_TREE() {
+    if [ "$#" -ne 2 ]; then
+        echo -e "Usage: ${FUNCNAME[0]} <STOCK_DEVICE> <STOCK_FIRMWARE_DIR>"
+        return 1
+    fi
+
+    local STOCK="$1"
+    local STOCK_FW="$2"
+    local DEST="$DEVICES_DIR/$STOCK/Stock"
+
+    if [ -d "$DEST/system" ]; then
+        echo "- Stock tree already present: $DEST"
+        return 0
+    fi
+    if [ ! -d "$STOCK_FW" ]; then
+        echo "- No stock firmware downloaded for $STOCK; camera/NFC stock sync will use donor fallbacks."
+        return 0
+    fi
+
+    echo "- Preparing Stock tree for $STOCK (system partition only)..."
+    EXTRACT_FIRMWARE "$STOCK_FW" || return 1
+    EXTRACT_SUPER_IMG "$STOCK_FW" || return 1
+    # Drop every non-system image before extraction to save disk/time.
+    rm -f "$STOCK_FW"/vendor*.img "$STOCK_FW"/product*.img "$STOCK_FW"/odm*.img \
+        "$STOCK_FW"/system_ext*.img "$STOCK_FW"/boot.img "$STOCK_FW"/recovery.img \
+        "$STOCK_FW"/vbmeta*.img "$STOCK_FW"/dtbo*.img 2>/dev/null
+    EXTRACT_FIRMWARE_IMG "$STOCK_FW" "system.img" || return 1
+    if [ ! -d "$STOCK_FW/system" ]; then
+        echo "- system extraction failed for $STOCK"
+        return 1
+    fi
+    mkdir -p "$DEST"
+    cp -a "$STOCK_FW/system" "$DEST/system"
+    rm -rf "$STOCK_FW"
+    echo "- Stock tree ready: $DEST/system"
+}
+
+
 PREPARE_PARTITIONS() {
     if [ "$#" -ne 1 ]; then
         echo -e "Usage: ${FUNCNAME[0]} <EXTRACTED_FIRM_DIR>"
