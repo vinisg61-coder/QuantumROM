@@ -89,7 +89,9 @@ jobs:
             echo "ℹ️ No STOCK_DEVICE_IMEI given — camera/NFC stock sync will use donor fallbacks. Skipping."
             exit 0
           fi
-          DOWNLOAD_FIRMWARE "${{ github.event.inputs.STOCK_DEVICE }}" "${{ github.event.inputs.STOCK_DEVICE_CSC }}" "${{ github.event.inputs.STOCK_DEVICE_IMEI }}" "FW" "${{ github.event.inputs.STOCK_FW_VERSION }}"
+          # Try with provided IMEI first; if samloader can't find it, fall back to latest
+          DOWNLOAD_FIRMWARE "${{ github.event.inputs.STOCK_DEVICE }}" "${{ github.event.inputs.STOCK_DEVICE_CSC }}" "${{ github.event.inputs.STOCK_DEVICE_IMEI }}" "FW" "${{ github.event.inputs.STOCK_FW_VERSION }}" || \
+            DOWNLOAD_FIRMWARE "${{ github.event.inputs.STOCK_DEVICE }}" "${{ github.event.inputs.STOCK_DEVICE_CSC }}" "" "FW" "${{ github.event.inputs.STOCK_FW_VERSION }}"
 
       - name: Extract firmware
         run: |
