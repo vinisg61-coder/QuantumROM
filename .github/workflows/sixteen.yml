@@ -40,7 +40,7 @@ on:
         required: false
         default: "EUX"
       STOCK_FW_VERSION:
-        description: "Exact stock firmware version (blank = latest)"
+        description: "Exact stock firmware version (blank = latest from Samsung FUS; try A528BXXSB...), if fails try blank)"
         required: false
         default: ""
       PIXELDRAIN_API_KEY:
@@ -89,9 +89,11 @@ jobs:
             echo "ℹ️ No STOCK_DEVICE_IMEI given — camera/NFC stock sync will use donor fallbacks. Skipping."
             exit 0
           fi
-          # Try with provided IMEI first; if samloader can't find it, fall back to latest
-          DOWNLOAD_FIRMWARE "${{ github.event.inputs.STOCK_DEVICE }}" "${{ github.event.inputs.STOCK_DEVICE_CSC }}" "${{ github.event.inputs.STOCK_DEVICE_IMEI }}" "FW" "${{ github.event.inputs.STOCK_FW_VERSION }}" || \
-            DOWNLOAD_FIRMWARE "${{ github.event.inputs.STOCK_DEVICE }}" "${{ github.event.inputs.STOCK_DEVICE_CSC }}" "" "FW" "${{ github.event.inputs.STOCK_FW_VERSION }}"
+          DOWNLOAD_FIRMWARE "${{ github.event.inputs.STOCK_DEVICE }}" "${{ github.event.inputs.STOCK_DEVICE_CSC }}" "${{ github.event.inputs.STOCK_DEVICE_IMEI }}" "FW" "${{ github.event.inputs.STOCK_FW_VERSION }}"
+          if [ $? -ne 0 ]; then
+            echo "⚠️ Stock fw download failed with IMEI/version — retrying latest (no IMEI)..."
+            DOWNLOAD_FIRMWARE "${{ github.event.inputs.STOCK_DEVICE }}" "${{ github.event.inputs.STOCK_DEVICE_CSC }}" "" "FW" ""
+          fi
 
       - name: Extract firmware
         run: |
