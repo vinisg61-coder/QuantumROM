@@ -34,7 +34,7 @@ on:
       STOCK_DEVICE_IMEI:
         description: "Stock device IMEI (enables stock firmware download for camera/NFC stock sync; blank = donor fallbacks)"
         required: false
-        default: "357456426901271"
+        default: "357645765200648"
       STOCK_DEVICE_CSC:
         description: "Stock device CSC"
         required: false
