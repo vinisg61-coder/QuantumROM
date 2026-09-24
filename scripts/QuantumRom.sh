@@ -175,6 +175,68 @@ DETECT_FILESYSTEM() {
 }
 
 
+# SAMLOADER_BACKEND
+# Prints which downloader backend is available:
+#   "rs"     -> samloader-rs (topjohnwu; same backend UN1CA uses — no IMEI required)
+#   "python" -> python3 -m samloader (legacy/local fallback)
+#   "none"   -> only the public FOTA version.xml lookup remains
+SAMLOADER_BACKEND() {
+    if command -v samloader >/dev/null 2>&1 \
+        && samloader download --help 2>&1 | grep -q -- '--out-dir'; then
+        echo "rs"
+    elif python3 -c "import samloader" >/dev/null 2>&1; then
+        echo "python"
+    else
+        echo "none"
+    fi
+}
+
+# GET_LATEST_FIRMWARE <MODEL> <CSC> [IMEI]
+# Prints the latest firmware version (PDA/CSC/MODEL...) for model & region.
+# Same fallback chain as UN1CA firmware_utils.sh GET_LATEST_FIRMWARE plus the
+# python backend: samloader-rs check-update -> python samloader -> FOTA version.xml
+GET_LATEST_FIRMWARE() {
+    local MODEL="$1"
+    local CSC="$2"
+    local IMEI="${3:-}"
+    local BACKEND VERSION=""
+
+    BACKEND="$(SAMLOADER_BACKEND)"
+
+    if [ "$BACKEND" = "rs" ]; then
+        VERSION="$(samloader check-update --model "$MODEL" --region "$CSC" 2>/dev/null | head -n1)"
+    elif [ "$BACKEND" = "python" ]; then
+        if [ -n "$IMEI" ]; then
+            VERSION="$(python3 -m samloader -m "$MODEL" -r "$CSC" -i "$IMEI" checkupdate 2>/dev/null | head -n1)"
+        fi
+        if [ -z "$VERSION" ]; then
+            VERSION="$(python3 -m samloader -m "$MODEL" -r "$CSC" checkupdate 2>/dev/null | head -n1)"
+        fi
+    fi
+
+    # Sanity: a version is slash-separated and never contains spaces
+    # (error text like "No latest firmware available" must not pass).
+    if [ -n "$VERSION" ] && [[ "$VERSION" == */* ]] && [[ "$VERSION" != *" "* ]]; then
+        echo "$VERSION"
+        return 0
+    fi
+
+    # Public FOTA version.xml — no auth/IMEI needed (UN1CA fallback).
+    # The FOTA CDN (Akamai) returns "Access Denied" without a client User-Agent.
+    VERSION="$(curl -s --retry 3 -m 10 -A "FUSClient" "https://fota-cloud-dn.ospserver.net/firmware/${CSC}/${MODEL}/version.xml" \
+        | perl -nE 'say $1 if /<latest[^>]*>(.*?)<\/latest>/' | head -n1)"
+    if [ -n "$VERSION" ] && [[ "$VERSION" == */* ]]; then
+        echo "$VERSION"
+        return 0
+    fi
+
+    return 1
+}
+
+# DOWNLOAD_FIRMWARE <MODEL> <CSC> <IMEI> <DOWNLOAD_DIRECTORY> [VERSION]
+# Downloads & decrypts the firmware zip into <DOWNLOAD_DIRECTORY>/<MODEL>/.
+# IMEI is optional (samloader-rs / FOTA fallback do not need it).
+# Retries the transfer up to 10 times, 5s apart — same as UN1CA download_fw.sh.
 DOWNLOAD_FIRMWARE() {
     echo " "
 
@@ -188,44 +250,80 @@ DOWNLOAD_FIRMWARE() {
     local IMEI="$3"
     local DOWN_DIR="${4}/$MODEL"
     local REQUESTED_VERSION="${5:-}"
+    local VERSION=""
+    local BACKEND ATTEMPT
 
     rm -rf "$DOWN_DIR"
     mkdir -p "$DOWN_DIR"
 
+    BACKEND="$(SAMLOADER_BACKEND)"
+
     echo -e "======================================"
-    echo -e "  Samsung FW Downloader   "
+    echo -e "  Samsung FW Downloader (UN1CA style)"
     echo -e "======================================"
-    echo -e "MODEL: $MODEL | CSC: $CSC"
+    echo -e "MODEL: $MODEL | CSC: $CSC | backend: $BACKEND${IMEI:+ | IMEI: $IMEI}"
 
     if [ -n "$REQUESTED_VERSION" ]; then
         VERSION="$REQUESTED_VERSION"
         echo -e "Using fixed firmware version: $VERSION"
     else
-        VERSION=$(python3 -m samloader -m "$MODEL" -r "$CSC" -i "$IMEI" checkupdate 2>&1)
+        VERSION="$(GET_LATEST_FIRMWARE "$MODEL" "$CSC" "$IMEI")"
 
-        if [ $? -ne 0 ] || [ -z "$VERSION" ]; then
-            echo -e "⛔️ MODEL/CSC/IMEI not valid or no update found."
-            echo -e "Error: $VERSION"
+        if [ -z "$VERSION" ]; then
+            echo -e "⛔️ Latest available firmware could not be fetched for $MODEL/$CSC."
             return 1
         fi
+        echo -e "Latest available firmware: $VERSION"
     fi
 
     if [ -n "${GITHUB_ENV:-}" ]; then
         echo "VERSION=$VERSION" >> "$GITHUB_ENV"
     fi
 
-    # --- Step 2: Download Firmware ---
-    if [ -n "$REQUESTED_VERSION" ]; then
-        python3 -m samloader -m "$MODEL" -r "$CSC" -i "$IMEI" download -v "$VERSION" -O "$DOWN_DIR"
-    else
-        python3 -m samloader -m "$MODEL" -r "$CSC" -i "$IMEI" download -O "$DOWN_DIR"
-    fi
-    if [ $? -ne 0 ]; then
-        echo -e "⛔️ Download failed. Check IMEI/MODEL/CSC/version."
-        exit 1
+    # --- Download (with retries) ---
+    if [ "$BACKEND" = "none" ]; then
+        echo -e "⛔️ No samloader backend available (cargo/pip install failed?)."
+        return 1
     fi
 
-	find "$DOWN_DIR" -type f -name "*.zip.enc*" -delete
+    ATTEMPT=1
+    while true; do
+        echo -e "- Downloading firmware... (attempt $ATTEMPT/10)"
+        if [ "$BACKEND" = "rs" ]; then
+            samloader download \
+                --model "$MODEL" \
+                --region "$CSC" \
+                --version "$VERSION" \
+                --out-dir "$DOWN_DIR" || true
+        else
+            if [ -n "$IMEI" ]; then
+                python3 -m samloader -m "$MODEL" -r "$CSC" -i "$IMEI" download -v "$VERSION" -O "$DOWN_DIR" || true
+            else
+                python3 -m samloader -m "$MODEL" -r "$CSC" download -v "$VERSION" -O "$DOWN_DIR" || true
+            fi
+        fi
+
+        # A usable result is a decrypted zip (or a still-encrypted .enc from python).
+        if find "$DOWN_DIR" -maxdepth 1 -type f \( -name "*.zip" -o -name "*.zip.enc*" \) -print -quit | grep -q .; then
+            break
+        fi
+
+        if [ "$ATTEMPT" -ge 10 ]; then
+            echo -e "⛔️ Download failed after 10 attempts. Check MODEL/CSC/version."
+            return 1
+        fi
+        echo -e "⚠️ [Attempt: $ATTEMPT] Download failed, retrying in 5 seconds..."
+        sleep 5
+        ATTEMPT=$((ATTEMPT + 1))
+    done
+
+    # Drop leftover encrypted files (python backend), keep the plain zip.
+    find "$DOWN_DIR" -type f -name "*.zip.enc*" -delete
+
+    if ! find "$DOWN_DIR" -maxdepth 1 -type f -name "*.zip" -print -quit | grep -q .; then
+        echo -e "⛔️ Download finished without a decrypted firmware zip."
+        return 1
+    fi
 
     # --- Show Firmware Info ---
     local file_size=$(du -m "${DOWN_DIR}"/${MODEL}_*_fac.zip 2>/dev/null | cut -f1)
@@ -2795,6 +2893,50 @@ HOTSPOT_EOF
 }
 
 
+# PATCH_SOUNDTRIGGER_NO_REBOOT <EXTRACTED_SERVICES_DIRECTORY>
+# A52sxq audio fix (root cause, Option B): SoundTriggerHalEnforcer catches the
+# HalException from the broken hotword HAL and "reboots" it by setting
+# sys.audio.restart.hal=1 -> init SIGKILLs vendor.audio-hal -> audioserver dies
+# with it and all AudioTracks go stale. Rename the property being set so the
+# enforcer keeps logging the failure but nothing reboots the audio HAL.
+# Pure string-constant rename: smali structure/control flow stays untouched.
+PATCH_SOUNDTRIGGER_NO_REBOOT() {
+    echo " "
+
+    if [ "$#" -ne 1 ]; then
+        echo -e "Usage: ${FUNCNAME[0]} <EXTRACTED_SERVICES_DIRECTORY>"
+        return 1
+    fi
+
+    local SMALI_DIR="$1"
+    echo -e "Patching SoundTriggerHalEnforcer (no audio HAL reboot)."
+
+    if ! grep -rq "Exception caught from HAL, rebooting HAL" "$SMALI_DIR" 2>/dev/null; then
+        echo -e "    -> ⚠️ SoundTriggerHalEnforcer log string not found (layout change?)"
+    fi
+
+    local HITS
+    HITS="$(grep -rl 'sys\.audio\.restart\.hal' "$SMALI_DIR" 2>/dev/null || true)"
+    if [ -z "$HITS" ]; then
+        echo -e "    -> ⚠️ 'sys.audio.restart.hal' not found in services smali — nothing to patch."
+        return 0
+    fi
+
+    local COUNT=0
+    local FILE
+    while IFS= read -r FILE; do
+        [ -z "$FILE" ] && continue
+        if grep -q '"sys\.audio\.restart\.hal"' "$FILE"; then
+            sed -i 's/"sys\.audio\.restart\.hal"/"sys.audio.restart.hal.disabled"/g' "$FILE"
+            COUNT=$((COUNT + 1))
+            echo "    -> ${FILE#"$SMALI_DIR"/}"
+        fi
+    done <<< "$HITS"
+
+    echo -e "    -> HAL reboot property neutralized in $COUNT smali file(s)."
+}
+
+
 PATCH_AUDIO_A52S() {
     echo " "
 
@@ -2914,6 +3056,27 @@ PATCH_AUDIO_A52S() {
             fi
         done
         echo "    -> Synced floating feature audio keys from Stock"
+    fi
+
+    # 7. A52sxq audio fix: neutralize the SoundTrigger HAL reboot trigger.
+    #    Hotword sound-model registration fails on this port
+    #    (q6lsm LSM_REG_SND_MODEL rc -131 / ACDB -19), SoundTriggerHalEnforcer then
+    #    sets sys.audio.restart.hal=1 and init SIGKILLs vendor.audio-hal
+    #    (audioserver.rc:59) -> audioserver exits with status 1 in a ~5s loop ->
+    #    every AudioTrack dies ("dead IAudioTrack" -> no sound ~3s into a video).
+    #    Renaming the trigger property keeps init from ever reacting to it:
+    #    the property is still set, but nothing kills the audio HAL anymore.
+    local RC_COUNT=0
+    local rc
+    while IFS= read -r rc; do
+        if grep -q '^on property:sys\.audio\.restart\.hal=1' "$rc"; then
+            sed -i 's/^on property:sys\.audio\.restart\.hal=1/on property:sys.audio.restart.hal.disabled=1/' "$rc"
+            RC_COUNT=$((RC_COUNT + 1))
+            echo "    -> Neutralized HAL reboot trigger in ${rc#"$TARGET_DIR"/}"
+        fi
+    done < <(find "$TARGET_DIR" -type f -name "*.rc")
+    if [ "$RC_COUNT" -eq 0 ]; then
+        echo "    -> ⚠️ 'on property:sys.audio.restart.hal=1' not found in any .rc (layout changed?)"
     fi
 
     echo "    -> Audio patch applied for A52s"

@@ -1,0 +1,72 @@
+name: Stock Download A52s (SM-A528B)
+
+on:
+  workflow_dispatch:
+    inputs:
+      STOCK_DEVICE:
+        description: "Stock device model (SM-A528B / None)"
+        required: true
+        default: "SM-A528B"
+      STOCK_DEVICE_CSC:
+        description: "Stock CSC (BTU = the CSC UN1CA uses for SM-A528B / EUX / etc)"
+        required: true
+        default: "BTU"
+      STOCK_DEVICE_IMEI:
+        description: "IMEI (optional — samloader-rs/FOTA fallback don't need it)"
+        required: false
+        default: ""
+      STOCK_FW_VERSION:
+        description: "Exact version (blank = latest)"
+        required: false
+        default: ""
+
+jobs:
+  download-stock:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install samloader / tools
+        run: |
+          sudo apt update
+          sudo apt install -y python3 python3-pip curl
+          sudo pip3 install git+https://github.com/SN-Abdullah-Al-Noman/samloader.git --break-system-packages
+          # samloader-rs — same backend UN1CA uses (no IMEI needed)
+          if ! command -v cargo >/dev/null 2>&1; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+            echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+            export PATH="$HOME/.cargo/bin:$PATH"
+          fi
+          git clone --depth 1 https://github.com/topjohnwu/samloader-rs.git /tmp/samloader-rs
+          (cd /tmp/samloader-rs && cargo build --locked --release --package samloader)
+          cp /tmp/samloader-rs/target/release/samloader "$HOME/.cargo/bin/samloader"
+          samloader check-update --help
+
+      - name: Download A52s stock firmware
+        uses: nick-fields/retry@v4
+        with:
+          timeout_minutes: 60
+          max_attempts: 3
+          retry_on: error
+          command: |
+            source scripts/QuantumRom.sh
+            DOWNLOAD_FIRMWARE "${{ github.event.inputs.STOCK_DEVICE }}" \
+                "${{ github.event.inputs.STOCK_DEVICE_CSC }}" \
+                "${{ github.event.inputs.STOCK_DEVICE_IMEI }}" \
+                "FW" "${{ github.event.inputs.STOCK_FW_VERSION }}" || exit 1
+            ls -la "FW/${{ github.event.inputs.STOCK_DEVICE }}/" || exit 1
+
+      - name: Prepare Stock Tree (system only)
+        run: |
+          bash -c 'source scripts/QuantumRom.sh; PREPARE_STOCK_TREE "SM-A528B" "FW/SM-A528B" || echo "PREPARE_STOCK_TREE skipped (no fw dir)"'
+
+      - name: Upload stock tree artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stock-a52s-system
+          path: |
+            QuantumROM/Devices/SM-A528B/Stock/
+          if-no-files-found: ignore
+          retention-days: 7

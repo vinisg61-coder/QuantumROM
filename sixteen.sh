@@ -95,6 +95,7 @@ PATCH_KNOX_GUARD "$WORK_DIR/services"
 PATCH_FACTORY_TEST "$WORK_DIR/services"
 PATCH_SECURE_FOLDER "$WORK_DIR/services"
 APPLY_PATCH "$WORK_DIR/services" "$PATCHES_DIR/0001-Fix-FOD-brightness-scaling-in-getAlphaMaskLevel.patch" 
+PATCH_SOUNDTRIGGER_NO_REBOOT "$WORK_DIR/services"
 PATCH_PRIVATE_SHARE "$WORK_DIR/samsungkeystoreutils"
 
 RECOMPILE "$APKTOOL" "$FIRM_DIR/$TARGET_DEVICE/system/system/framework" "$WORK_DIR/ssrm" "$WORK_DIR"

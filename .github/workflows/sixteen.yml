@@ -32,13 +32,13 @@ on:
         required: true
         default: "S711BXXSFGZE2/S711BOXMFGZE2/S711BXXSFGZE2/S711BXXSFGZE2"
       STOCK_DEVICE_IMEI:
-        description: "Stock device IMEI (enables stock firmware download for camera/NFC stock sync; blank = donor fallbacks)"
+        description: "Stock device IMEI (optional — samloader-rs/FOTA fallback don't need it)"
         required: false
-        default: "357645765200648"
+        default: ""
       STOCK_DEVICE_CSC:
-        description: "Stock device CSC"
+        description: "Stock device CSC (BTU = the CSC UN1CA uses for SM-A528B)"
         required: false
-        default: "EUX"
+        default: "BTU"
       STOCK_FW_VERSION:
         description: "Exact stock firmware version (blank = latest from Samsung FUS; try A528BXXSB...), if fails try blank)"
         required: false
@@ -75,25 +75,41 @@ jobs:
           sudo apt install -y p7zip-full lz4 liblz4-1 liblz4-dev libzstd1 libzstd-dev build-essential android-sdk-libsparse-utils f2fs-tools fuse2fs fuse e2fsprogs python3 python3-pip zipalign unzip openjdk-21-jdk jq perl xxd kmod erofs-utils linux-modules-extra-$(uname -r)
           sudo modprobe f2fs
           sudo pip3 install git+https://github.com/SN-Abdullah-Al-Noman/samloader.git --break-system-packages
+          # samloader-rs — same backend UN1CA uses (no IMEI needed, downloads A528B fine)
+          if ! command -v cargo >/dev/null 2>&1; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+            echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+            export PATH="$HOME/.cargo/bin:$PATH"
+          fi
+          git clone --depth 1 https://github.com/topjohnwu/samloader-rs.git /tmp/samloader-rs
+          (cd /tmp/samloader-rs && cargo build --locked --release --package samloader)
+          cp /tmp/samloader-rs/target/release/samloader "$HOME/.cargo/bin/samloader"
+          samloader check-update --help
           mkdir -p FW WORK OUT
 
       - name: Download firmware ▶️ ${{ github.event.inputs.TARGET_DEVICE }} - ${{ github.event.inputs.TARGET_DEVICE_CSC }}
-        run: |
-          source scripts/QuantumRom.sh
-          DOWNLOAD_FIRMWARE "${{ github.event.inputs.TARGET_DEVICE }}" "${{ github.event.inputs.TARGET_DEVICE_CSC }}" "${{ github.event.inputs.TARGET_DEVICE_IMEI }}" "FW" "${{ github.event.inputs.TARGET_FW_VERSION }}"
+        uses: nick-fields/retry@v4
+        with:
+          timeout_minutes: 60
+          max_attempts: 3
+          retry_on: error
+          command: |
+            source scripts/QuantumRom.sh
+            DOWNLOAD_FIRMWARE "${{ github.event.inputs.TARGET_DEVICE }}" "${{ github.event.inputs.TARGET_DEVICE_CSC }}" "${{ github.event.inputs.TARGET_DEVICE_IMEI }}" "FW" "${{ github.event.inputs.TARGET_FW_VERSION }}"
 
       - name: Download stock firmware ▶️ ${{ github.event.inputs.STOCK_DEVICE }}
-        run: |
-          source scripts/QuantumRom.sh
-          if [ -z "${{ github.event.inputs.STOCK_DEVICE_IMEI }}" ] || [ "${{ github.event.inputs.STOCK_DEVICE }}" = "None" ]; then
-            echo "ℹ️ No STOCK_DEVICE_IMEI given — camera/NFC stock sync will use donor fallbacks. Skipping."
-            exit 0
-          fi
-          DOWNLOAD_FIRMWARE "${{ github.event.inputs.STOCK_DEVICE }}" "${{ github.event.inputs.STOCK_DEVICE_CSC }}" "${{ github.event.inputs.STOCK_DEVICE_IMEI }}" "FW" "${{ github.event.inputs.STOCK_FW_VERSION }}"
-          if [ $? -ne 0 ]; then
-            echo "⚠️ Stock fw download failed with IMEI/version — retrying latest (no IMEI)..."
-            DOWNLOAD_FIRMWARE "${{ github.event.inputs.STOCK_DEVICE }}" "${{ github.event.inputs.STOCK_DEVICE_CSC }}" "" "FW" ""
-          fi
+        uses: nick-fields/retry@v4
+        with:
+          timeout_minutes: 60
+          max_attempts: 3
+          retry_on: error
+          command: |
+            source scripts/QuantumRom.sh
+            if [ "${{ github.event.inputs.STOCK_DEVICE }}" = "None" ]; then
+              echo "ℹ️ No stock device selected — skipping."
+              exit 0
+            fi
+            DOWNLOAD_FIRMWARE "${{ github.event.inputs.STOCK_DEVICE }}" "${{ github.event.inputs.STOCK_DEVICE_CSC }}" "${{ github.event.inputs.STOCK_DEVICE_IMEI }}" "FW" "${{ github.event.inputs.STOCK_FW_VERSION }}"
 
       - name: Extract firmware
         run: |
