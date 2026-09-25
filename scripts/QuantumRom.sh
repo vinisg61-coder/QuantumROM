@@ -2347,11 +2347,34 @@ APPLY_STOCK_CONFIG() {
 	find "${EXTRACTED_FIRM_DIR}/system/system/media" -maxdepth 1 -type f \( -iname "*.spi" -o -iname "*.qmg" -o -iname "*.txt" \) -delete
 	rm -rf "$EXTRACTED_FIRM_DIR"/product/overlay/framework-res*auto_generated_rro_product.apk
 		rm -rf ${EXTRACTED_FIRM_DIR}/product/overlay/SystemUI*auto_generated_rro_product.apk
-		if [ -d "${DEVICES_DIR}/$STOCK_DEVICE/Stock" ]; then
+		if [ "$STOCK_DEVICE" = "SM-A528B" ]; then
+		    echo "- A52s: skipping blanket Stock tree overlay (donor Android 16 vs stock Android 14:"
+		    echo "  a full copy downgrades framework/build.prop/APEX and bootloops)."
+		    echo "  A52s stock needs (cameradata, camera libs, audio, wifi) are applied by explicit patches."
+		elif [ -d "${DEVICES_DIR}/$STOCK_DEVICE/Stock" ]; then
 		    cp -a "${DEVICES_DIR}/$STOCK_DEVICE/Stock/." "${EXTRACTED_FIRM_DIR}/"
 		else
 		    echo "- Warning: no target Stock tree at ${DEVICES_DIR}/$STOCK_DEVICE/Stock; preserving extracted donor/native assets."
 		fi
+
+    # APEX duplicate guard: stock (non-tplus, older launch) and donor (tplus)
+    # trees can ship different filenames for the same APEX module
+    # (extservices vs extservices_tplus). apexd-bootstrap aborts with
+    # Fatal Signal 6 on duplicates, so drop the non-tplus twin whenever
+    # both exist. The running system is the donor's, so tplus wins.
+    for _APEX_DIR in "${EXTRACTED_FIRM_DIR}/system/system/apex" \
+                     "${EXTRACTED_FIRM_DIR}/product/apex" \
+                     "${EXTRACTED_FIRM_DIR}/vendor/apex"; do
+        [ -d "$_APEX_DIR" ] || continue
+        for _TPLUS_APEX in "$_APEX_DIR"/*_tplus_compressed.apex; do
+            [ -e "$_TPLUS_APEX" ] || continue
+            _BASE_APEX="${_TPLUS_APEX%_tplus_compressed.apex}_compressed.apex"
+            if [ -f "$_BASE_APEX" ]; then
+                echo "- Removing duplicate APEX: $(basename "$_BASE_APEX") (keeping $(basename "$_TPLUS_APEX"))"
+                rm -f "$_BASE_APEX"
+            fi
+        done
+    done
 	    if [ -d "${DEVICES_DIR}/$STOCK_DEVICE/extra" ]; then
         cp -af "${DEVICES_DIR}/$STOCK_DEVICE/extra/." "$(pwd)/OUT"
     fi
