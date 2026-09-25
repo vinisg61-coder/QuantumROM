@@ -2855,6 +2855,52 @@ PATCH_SAMSUNG_CAMERA_LIBS() {
 }
 
 
+# PATCH_KEYSTORE_A52S <EXTRACTED_FIRM_DIR>
+# A52s fix (root cause, proven by ramoops): the donor (S711B/Exynos) keystore2
+# aborts ~20ms after start (SIGABRT x4 -> init LOG(FATAL) in Service::Reap ->
+# bootloop) because it expects Samsung Exynos KeyMint extensions / KeyMint
+# HALs absent from the QCA stock vendor (Keymaster 4.0 only). keystore2 is
+# designed to start before userdata is mounted, so this is NOT a /data issue.
+# Use the stock keystore2 binary + rc, proven against this vendor.
+PATCH_KEYSTORE_A52S() {
+    echo " "
+
+    if [ "$#" -ne 1 ]; then
+        echo -e "Usage: ${FUNCNAME[0]} <EXTRACTED_FIRM_DIR>"
+        return 1
+    fi
+
+    local TARGET_DIR="$1"
+
+    if [ "$STOCK_DEVICE" != "SM-A528B" ]; then
+        echo "- Skipping keystore patch (non-A52s device)."
+        return 0
+    fi
+
+    echo "- Patching keystore for A52s (stock keystore2 for Keymaster-only vendor)..."
+
+    local STOCK_BIN="${DEVICES_DIR}/$STOCK_DEVICE/Stock/system/system/bin/keystore2"
+    local PORT_BIN="${TARGET_DIR}/system/system/bin/keystore2"
+    local STOCK_RC="${DEVICES_DIR}/$STOCK_DEVICE/Stock/system/system/etc/init/keystore2.rc"
+    local PORT_RC="${TARGET_DIR}/system/system/etc/init/keystore2.rc"
+
+    if [ ! -f "$STOCK_BIN" ]; then
+        echo "    -> WARNING: stock keystore2 not found; keeping donor binary."
+        return 0
+    fi
+
+    cp -f "$STOCK_BIN" "$PORT_BIN"
+    echo "    -> Replaced system/bin/keystore2 with stock version"
+
+    if [ -f "$STOCK_RC" ] && [ -f "$PORT_RC" ]; then
+        cp -f "$STOCK_RC" "$PORT_RC"
+        echo "    -> Replaced system/etc/init/keystore2.rc with stock version"
+    else
+        echo "    -> WARNING: keystore2.rc not found on one side; keeping donor rc."
+    fi
+}
+
+
 PATCH_WIFI_HOTSPOT() {
     echo " "
 
