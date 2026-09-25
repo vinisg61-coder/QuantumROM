@@ -2929,6 +2929,8 @@ PATCH_VOLD_A52S() {
 
     local STOCK_BIN="${DEVICES_DIR}/$STOCK_DEVICE/Stock/system/system/bin/vold"
     local PORT_BIN="${TARGET_DIR}/system/system/bin/vold"
+    local STOCK_RC="${DEVICES_DIR}/$STOCK_DEVICE/Stock/system/system/etc/init/vold.rc"
+    local PORT_RC="${TARGET_DIR}/system/system/etc/init/vold.rc"
 
     if [ ! -f "$STOCK_BIN" ]; then
         echo "    -> WARNING: stock vold not found; keeping donor vold."
@@ -2942,6 +2944,16 @@ PATCH_VOLD_A52S() {
 
     cp -f "$STOCK_BIN" "$PORT_BIN"
     echo "    -> Replaced system/bin/vold with stock version"
+
+    # vold.rc as well: donor rc can pass flags/rlimits the stock binary
+    # rejects at startup (instant exit -> init 'vold-failed' reboot), so
+    # keep the proven stock binary+rc pair together.
+    if [ -f "$STOCK_RC" ] && [ -f "$PORT_RC" ]; then
+        cp -f "$STOCK_RC" "$PORT_RC"
+        echo "    -> Replaced system/etc/init/vold.rc with stock version"
+    else
+        echo "    -> WARNING: vold.rc not found on one side; keeping donor rc."
+    fi
 }
 
 
