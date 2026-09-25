@@ -106,26 +106,33 @@ cp -f "$SUPER_IMG" "$STAGING/super.img"
 ok "super.img successfully copied to staging."
 
 # ── Copy boot and dtbo ────────────────────────────────────────────────────────
-log "Looking for boot-dtbo zip in $EXTRA_DIR ..."
-BOOT_DTBO_ZIP="$(find "$EXTRA_DIR" -maxdepth 2 -type f -name "boot-dtbo.*.zip" | head -n1)"
-[[ -n "$BOOT_DTBO_ZIP" ]] || { die "No boot-dtbo.<codename>.zip found inside $EXTRA_DIR" || return 1; }
-ok "Found: $(basename "$BOOT_DTBO_ZIP")"
-
-log "Extracting boot.img and dtbo.img..."
-BOOT_TMP="$(mktemp -d)"
-
-7z e -y "$BOOT_DTBO_ZIP" -o"$BOOT_TMP" boot.img dtbo.img >/dev/null 2>&1 || \
-    unzip -o "$BOOT_DTBO_ZIP" boot.img dtbo.img -d "$BOOT_TMP" >/dev/null 2>&1
-
-if [[ ! -f "$BOOT_TMP/boot.img" ]] || [[ ! -f "$BOOT_TMP/dtbo.img" ]]; then
-    rm -rf "$BOOT_TMP"
-    die "boot.img or dtbo.img not found inside $(basename "$BOOT_DTBO_ZIP")" || return 1
-fi
-
-cp -f "$BOOT_TMP/boot.img" "$STAGING/boot.img"
-cp -f "$BOOT_TMP/dtbo.img" "$STAGING/dtbo.img"
-rm -rf "$BOOT_TMP"
-ok "boot.img and dtbo.img copied to staging."
+STOCK_BOOT_DIR="$DEVICE_DIR/stock-boot"
+BOOT_DTBO_ZIP=""
+_BOOT_TMP=""
+for _BOOT_FILE in boot.img dtbo.img; do
+    if [[ -f "$STOCK_BOOT_DIR/$_BOOT_FILE" ]]; then
+        log "Using stock $_BOOT_FILE from downloaded firmware..."
+        cp -f "$STOCK_BOOT_DIR/$_BOOT_FILE" "$STAGING/$_BOOT_FILE"
+        continue
+    fi
+    if [[ -z "$BOOT_DTBO_ZIP" ]]; then
+        log "Looking for boot-dtbo zip in $EXTRA_DIR ..."
+        BOOT_DTBO_ZIP="$(find "$EXTRA_DIR" -maxdepth 2 -type f -name "boot-dtbo.*.zip" | head -n1)"
+        [[ -n "$BOOT_DTBO_ZIP" ]] || { die "No $_BOOT_FILE in stock-boot and no boot-dtbo zip in $EXTRA_DIR" || return 1; }
+        ok "Found: $(basename "$BOOT_DTBO_ZIP")"
+        _BOOT_TMP="$(mktemp -d)"
+        log "Extracting boot.img and dtbo.img..."
+        7z e -y "$BOOT_DTBO_ZIP" -o"$_BOOT_TMP" boot.img dtbo.img >/dev/null 2>&1 || \
+            unzip -o "$BOOT_DTBO_ZIP" boot.img dtbo.img -d "$_BOOT_TMP" >/dev/null 2>&1
+    fi
+    if [[ ! -f "$_BOOT_TMP/$_BOOT_FILE" ]]; then
+        rm -rf "$_BOOT_TMP"
+        die "$_BOOT_FILE not found inside $(basename "$BOOT_DTBO_ZIP")" || return 1
+    fi
+    cp -f "$_BOOT_TMP/$_BOOT_FILE" "$STAGING/$_BOOT_FILE"
+done
+[[ -n "$_BOOT_TMP" ]] && rm -rf "$_BOOT_TMP"
+ok "boot.img and dtbo.img ready in staging."
 
 # ── Generate updater-script ───────────────────────────────────────────────────
 log "Generating updater-script..."

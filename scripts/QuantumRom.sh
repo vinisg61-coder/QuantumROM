@@ -554,6 +554,21 @@ PREPARE_STOCK_TREE() {
     echo "- Preparing Stock tree for $STOCK (system partition only)..."
     EXTRACT_FIRMWARE "$STOCK_FW" || return 1
     EXTRACT_SUPER_IMG "$STOCK_FW" || return 1
+    # Preserve the native boot chain for the flashable zip. A third-party
+    # release boot.img once proved unbootable (kernel cannot unpack its
+    # ramdisk), so always flash the boot/dtbo matching the downloaded
+    # stock firmware instead of trusting an external asset.
+    local STOCK_BOOT_DIR="$DEVICES_DIR/$STOCK/stock-boot"
+    mkdir -p "$STOCK_BOOT_DIR"
+    local _STOCK_BOOT_IMG
+    for _STOCK_BOOT_IMG in boot.img dtbo.img; do
+        if [ -f "$STOCK_FW/$_STOCK_BOOT_IMG" ]; then
+            cp -f "$STOCK_FW/$_STOCK_BOOT_IMG" "$STOCK_BOOT_DIR/$_STOCK_BOOT_IMG"
+            echo "- Saved stock $_STOCK_BOOT_IMG for flashable zip"
+        else
+            echo "- Warning: stock $_STOCK_BOOT_IMG not found in downloaded firmware"
+        fi
+    done
     # Drop every non-system image before extraction to save disk/time.
     rm -f "$STOCK_FW"/vendor*.img "$STOCK_FW"/product*.img "$STOCK_FW"/odm*.img \
         "$STOCK_FW"/system_ext*.img "$STOCK_FW"/boot.img "$STOCK_FW"/recovery.img \
