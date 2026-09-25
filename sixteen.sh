@@ -124,6 +124,19 @@ BUILD_PROP "$FIRM_DIR/$TARGET_DEVICE" "system" "ro.build.display.id" "QuantumROM
 BUILD_PROP "$FIRM_DIR/$TARGET_DEVICE" "product" "ro.build.display.id" "QuantumROM Aurora - 1.0.0 (${B_ID}.${B_V})"
 FIX_HFR "$FIRM_DIR/$TARGET_DEVICE"
 
+# A52s super-fit triage: the physical super partition is fixed
+# (10643046400 bytes), so log the largest app dirs before building images.
+# This makes the next size overrun diagnosable straight from the build log.
+echo "- Largest app dirs per partition (super-size triage):"
+for _PAYLOAD_DIR in \
+    "$FIRM_DIR/$TARGET_DEVICE/system/system/app" \
+    "$FIRM_DIR/$TARGET_DEVICE/system/system/priv-app" \
+    "$FIRM_DIR/$TARGET_DEVICE/product/app" \
+    "$FIRM_DIR/$TARGET_DEVICE/product/priv-app"; do
+    [ -d "$_PAYLOAD_DIR" ] || continue
+    du -sh "$_PAYLOAD_DIR"/* 2>/dev/null | sort -rh | head -n 15
+done
+
 BUILD_IMG "$FIRM_DIR/$TARGET_DEVICE" "all" "$OUTPUT_FILESYSTEM" "$OUT_DIR"
 if ! BUILD_SUPER_IMG "$OUT_DIR" "$OUT_DIR"; then
     echo "- Failed to build a valid super.img; aborting before flashable ZIP packaging."

@@ -377,6 +377,25 @@ DEBLOAT() {
     quantum_remove "system" "lib64/android.security.securekeygeneration-ndk.so"
     quantum_remove "system" "lib64/libssu_keystore2.so"
 
+    # ── A52s super-fit: the S711B donor system (~8.5 GB) does not fit the A52s
+    # physical super partition (10643046400 bytes — verified on-device, sda26),
+    # so drop another layer of safely-removable apps. Everything below is either
+    # reinstallable from Play/Galaxy Store or broken on Knox 0x1 anyway.
+    # Untouched: Velvet, GoogleTTS, Messages, Camera/Gallery, Galaxy AI,
+    # Secure Folder, AOD, Edge, Modes & Routines, Device Care, My Files.
+    BLOAT_TARGETS+=(
+        # Google apps reinstallable from Play Store
+        "Drive" "Docs" "Sheets" "Slides" "Meet" "Music2" "YouTubeMusic"
+        "PlayGames" "GoogleOne"
+        # Optional Samsung apps reinstallable from Galaxy Store
+        "TVPlus" "SamsungTVPlus" "KidsHome" "SHealth" "SamsungMembers"
+        "PenUp" "GlobalGoals" "SamsungFlow"
+        # Bixby assistant stack (Modes & Routines intentionally kept)
+        "BixbyVoice" "BixbyVision" "BixbyHome" "BixbyService"
+        # DeX (no DeX hardware on A52s)
+        "DeX" "DeXHome" "SamsungDeX"
+    )
+
     # ── 5. Dynamic removal across all sub-partitions ──────────────────────────
     for app_name in "${BLOAT_TARGETS[@]}"; do
         while IFS= read -r found_dir; do

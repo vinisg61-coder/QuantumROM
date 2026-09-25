@@ -116,16 +116,6 @@ jobs:
           source scripts/QuantumRom.sh
           EXTRACT_FIRMWARE "FW/${{ github.event.inputs.TARGET_DEVICE }}"
 
-      - name: Prepare stock tree ▶️ ${{ github.event.inputs.STOCK_DEVICE }}
-        run: |
-          if [ "${{ github.event.inputs.STOCK_DEVICE }}" = "None" ]; then
-            echo "ℹ️ No stock device selected — skipping."
-            exit 0
-          fi
-          export DEVICES_DIR="$(pwd)/QuantumROM/Devices"
-          source scripts/QuantumRom.sh
-          PREPARE_STOCK_TREE "${{ github.event.inputs.STOCK_DEVICE }}" "FW/${{ github.event.inputs.STOCK_DEVICE }}"
-
       - name: Download extra partition images (odm/vendor) from GitHub Release
         env:
           STOCK_DEVICE: ${{ github.event.inputs.STOCK_DEVICE }}
