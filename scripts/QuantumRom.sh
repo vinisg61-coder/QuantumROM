@@ -2901,6 +2901,50 @@ PATCH_KEYSTORE_A52S() {
 }
 
 
+# PATCH_VOLD_A52S <EXTRACTED_FIRM_DIR>
+# A52s fix (root cause, proven by elimination): donor (S711B) vold never
+# mounts a fresh userdata (no /data dirs, no userdata I/O after 6+ min uptime,
+# keystore2 dying for lack of /data) while the stock vendor/Keymaster stack
+# is healthy. Old builds booted because /data was still initialized from the
+# stock era (unwrap works); after a data format, FBE-INIT (fresh key setup)
+# against this vendor fails with donor vold. Stock vold performs first-boot
+# FBE init correctly here. Framework talks to vold over STABLE AIDL, so the
+# older binary stays compatible. Binary only: the donor rc starts it fine.
+PATCH_VOLD_A52S() {
+    echo " "
+
+    if [ "$#" -ne 1 ]; then
+        echo -e "Usage: ${FUNCNAME[0]} <EXTRACTED_FIRM_DIR>"
+        return 1
+    fi
+
+    local TARGET_DIR="$1"
+
+    if [ "$STOCK_DEVICE" != "SM-A528B" ]; then
+        echo "- Skipping vold patch (non-A52s device)."
+        return 0
+    fi
+
+    echo "- Patching vold for A52s (stock vold for FBE init on this vendor)..."
+
+    local STOCK_BIN="${DEVICES_DIR}/$STOCK_DEVICE/Stock/system/system/bin/vold"
+    local PORT_BIN="${TARGET_DIR}/system/system/bin/vold"
+
+    if [ ! -f "$STOCK_BIN" ]; then
+        echo "    -> WARNING: stock vold not found; keeping donor vold."
+        return 0
+    fi
+
+    if [ ! -f "$PORT_BIN" ]; then
+        echo "    -> WARNING: donor vold not found; nothing to replace."
+        return 0
+    fi
+
+    cp -f "$STOCK_BIN" "$PORT_BIN"
+    echo "    -> Replaced system/bin/vold with stock version"
+}
+
+
 PATCH_WIFI_HOTSPOT() {
     echo " "
 
