@@ -2872,9 +2872,16 @@ HOTSPOT_EOF
         echo "    -> No vendor/etc/wifi found; relying on vendor.img defaults"
     fi
 
-    # 3. Remove donor Exynos wifi overlays that conflict with sm7325
+    # 3. Remove donor wifi overlays that conflict with sm7325/QCA.
+    # Samsung SoftAP overlays do not contain "wifi"/"Wifi" in their names, so the
+    # globs below miss SoftapOverlayDualAp. That overlay sets
+    # config_wifiBridgedSoftApSupported=true, which makes the framework request a
+    # dual-band bridged AP (createIfaceType=2) that the A52s vendor HAL rejects.
     rm -f "${TARGET_DIR}/product/overlay/"*wifi*.apk 2>/dev/null
     rm -f "${TARGET_DIR}/product/overlay/"*Wifi*.apk 2>/dev/null
+    rm -rf "${TARGET_DIR}/product/overlay/SoftapOverlayDualAp" 2>/dev/null
+    rm -f "${TARGET_DIR}/product/overlay/SoftapOverlayDualAp.apk" 2>/dev/null
+    echo "    -> Removed donor SoftapOverlayDualAp (bridged AP unsupported on A52s)"
 
     # 4. Ensure product wifi configs are present
     if [ -d "${STOCK_SYS}/product/etc/wifi" ]; then
