@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-#  QuantumROM — debloat.sh (Galaxy AI, Messages & Velvet Preserved)
+#  QuantumROM — debloat.sh (Messages & Velvet Preserved; Galaxy AI removed for A52s super-fit)
 # =============================================================================
 if [ -n "${DEVICES_DIR:-}" ] && [ -n "${STOCK_DEVICE:-}" ] && [ -f "$DEVICES_DIR/$STOCK_DEVICE/config" ]; then
     source "$DEVICES_DIR/$STOCK_DEVICE/config"
@@ -145,7 +145,8 @@ DEBLOAT() {
     declare -a BLOAT_TARGETS=()
 
     # General bloatware and trackers
-    # Mantidos do Galaxy AI: SumeNNService, vexfwk_service
+    # Galaxy AI removals live in the A52s super-fit block below
+    # (vexfwk_service stays: shared framework dependency)
     BLOAT_TARGETS+=(
         "ccinfo" "EasySetup" "MyDevice" "NSDSWebApp"
         "NSFusedLocation_v6.0" "SmartSwitchAgent" "SmartSwitchStub" "AASAservice"
@@ -290,7 +291,8 @@ DEBLOAT() {
     quantum_remove "system" "etc/permissions/signature-permissions-com.sec.android.mimage.avatarstickers.xml"
 
     # Heavy Samsung user apps
-    # Removido do debloat: OfflineLanguageModel_stub, AndroidSystemIntelligence, SamsungSmartSuggestions
+    # Kept: AndroidSystemIntelligence, SamsungSmartSuggestions
+    # (OfflineLanguageModel_* packs are removed in the A52s super-fit block below)
     BLOAT_TARGETS+=(
         "SamsungCalendar" "ClockPackage" "MinusOnePage" "SmartReminder"
         "Notes40" "SBrowser" "GearManagerStub"
@@ -395,6 +397,26 @@ DEBLOAT() {
         # DeX (no DeX hardware on A52s)
         "DeX" "DeXHome" "SamsungDeX"
     )
+
+    # ── Galaxy AI removal (explicitly allowed): on-device Samsung AI stack.
+    # Untouched: camera capture/editing (PhotoEditor, LiveEffectService,
+    # StoryService), Modes & Routines, keyboard voice input, Google ASI
+    # (Live Caption), Translate app. Everything below degrades gracefully
+    # (features hide or offer download) when the packages are absent.
+    BLOAT_TARGETS+=(
+        # On-device NN service + personalization engine
+        "SumeNNService" "PersonalDataEngine"
+        # Generative wallpaper + Interpreter + Now Brief
+        "AiWallpaper" "Interpreter" "NowBrief"
+    )
+    # Offline translation language packs (all locales, all app dirs)
+    for _AI_APP_DIR in \
+        "${TARGET_DIR}/system/system/app" \
+        "${TARGET_DIR}/system/system/priv-app" \
+        "${TARGET_DIR}/product/app" \
+        "${TARGET_DIR}/product/priv-app"; do
+        rm -rf "${_AI_APP_DIR}"/OfflineLanguageModel_* 2>/dev/null
+    done
 
     # ── 5. Dynamic removal across all sub-partitions ──────────────────────────
     for app_name in "${BLOAT_TARGETS[@]}"; do
