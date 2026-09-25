@@ -408,6 +408,10 @@ DEBLOAT() {
         "SumeNNService" "PersonalDataEngine"
         # Generative wallpaper + Interpreter + Now Brief
         "AiWallpaper" "Interpreter" "NowBrief"
+        # Gallery AI model packs/services (base PhotoEditor/Gallery kept)
+        "PhotoEditor_AIFull" "PhotoRemasterService"
+        # Bixby assistant app (Modes & Routines intentionally kept)
+        "Bixby"
     )
     # Offline translation language packs (all locales, all app dirs)
     for _AI_APP_DIR in \

@@ -66,6 +66,11 @@ PATCH_CODEC2_SECCOMP "$FIRM_DIR/$TARGET_DEVICE"
 
 APPLY_STOCK_CONFIG "$FIRM_DIR/$TARGET_DEVICE"
 
+# The Stock tree overlay re-adds stock copies of Samsung apps already removed
+# by DEBLOAT (TTS voices, OneDrive, BixbyWakeup, ...), so run debloat once
+# more to keep the payload fitting the fixed A52s super partition.
+DEBLOAT "$FIRM_DIR/$TARGET_DEVICE"
+
 # SM-A528B stock 5.4 compatibility: prevent donor schedtune/cgroup setup
 # from making apexd-bootstrap fatal before Android userspace starts.
 if [ "$STOCK_DEVICE" = "SM-A528B" ]; then
